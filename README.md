@@ -52,26 +52,38 @@ QLDLN/
 ├── public/                           # Tài nguyên tĩnh (ảnh, icon, logo)
 ├── src/
 │   ├── app/                          # Next.js App Router
-│   │   ├── api/                      # Backend API Endpoints
-│   │   │   └── auth/                 # Nhóm API Quản lý tài khoản
-│   │   │       ├── register/         # POST /api/auth/register
-│   │   │       ├── login/            # POST /api/auth/login
-│   │   │       ├── logout/           # POST /api/auth/logout
-│   │   │       ├── profile/          # GET, PATCH /api/auth/profile
-│   │   │       │   └── avatar/       # POST /api/auth/profile/avatar
-│   │   │       ├── forgot-password/  # POST /api/auth/forgot-password
-│   │   │       ├── reset-password/   # POST /api/auth/reset-password
-│   │   │       ├── google/           # GET /api/auth/google
-│   │   │       └── callback/         # GET /api/auth/callback
+│   │   ├── api/                      # Backend API Endpoints (Route Handlers)
+│   │   │   ├── auth/                 # Nhóm API Quản lý tài khoản
+│   │   │   │   ├── register/         # POST /api/auth/register
+│   │   │   │   ├── login/            # POST /api/auth/login
+│   │   │   │   ├── logout/           # POST /api/auth/logout
+│   │   │   │   ├── profile/          # GET, PATCH /api/auth/profile
+│   │   │   │   │   └── avatar/       # POST, DELETE /api/auth/profile/avatar
+│   │   │   │   ├── forgot-password/  # POST /api/auth/forgot-password
+│   │   │   │   ├── reset-password/   # POST /api/auth/reset-password
+│   │   │   │   ├── google/           # GET /api/auth/google
+│   │   │   │   └── callback/         # GET /api/auth/callback
+│   │   │   └── trips/                # Nhóm API Quản lý chuyến đi
+│   │   │       ├── route.ts          # GET, POST /api/trips
+│   │   │       └── [tripId]/         # GET, PATCH, DELETE /api/trips/[tripId]
+│   │   ├── dashboard/                # Trang tổng quan chuyến đi (/dashboard)
+│   │   ├── profile/                  # Trang hồ sơ cá nhân (/profile)
 │   │   ├── favicon.ico
-│   │   ├── globals.css               # Global styles & Tailwind v4 config
+│   │   ├── globals.css               # Global styles, Tailwind v4, Keyframe animations & Hover states
 │   │   ├── layout.tsx                # Root layout
 │   │   └── page.tsx                  # Trang chủ (Login / Register Card)
 │   │
 │   ├── components/                   # React Components
-│   │   └── auth-card.tsx             # Giao diện Đăng nhập / Đăng ký
+│   │   ├── auth-card.tsx             # Giao diện Đăng nhập / Đăng ký / Quên MK
+│   │   ├── create-trip-modal.tsx     # Modal tạo chuyến đi mới
+│   │   ├── invite-friends-modal.tsx  # Modal mời bạn bè tham gia nhóm
+│   │   ├── profile-card.tsx          # Giao diện quản lý hồ sơ cá nhân & avatar
+│   │   ├── trip-dashboard.tsx        # Dashboard hiển thị danh sách chuyến đi, skeleton loader
+│   │   ├── trip-invite-modal.tsx     # Modal hiển thị lời mời du lịch
+│   │   └── trip-settings.tsx         # Cài đặt chuyến đi, chỉnh sửa thông tin & xóa chuyến đi
 │   │
 │   ├── lib/
+│   │   ├── date-utils.ts             # Chuẩn hóa & chuyển đổi ngày tháng (ISO ↔ DD/MM/YYYY)
 │   │   └── supabase/                 # Cấu hình kết nối Supabase
 │   │       ├── client.ts             # Browser client (cho Client Components)
 │   │       ├── server.ts             # Server client (cho Route Handlers, Server Components)
@@ -138,9 +150,11 @@ NEXT_PUBLIC_SITE_URL=http://localhost:3000
 
 ---
 
-## 📡 Tài liệu API Backend (Nhóm A - Authentication)
+## 📡 Tài liệu API Backend
 
 Tất cả các endpoint đều trả về dữ liệu định dạng **JSON** và sử dụng HTTP-only Cookie để lưu phiên đăng nhập.
+
+### Nhóm A: Authentication & User Profile
 
 | Chức năng | Phương thức | Endpoint | Body (JSON / FormData) | Response thành công |
 |---|---|---|---|---|
@@ -148,12 +162,46 @@ Tất cả các endpoint đều trả về dữ liệu định dạng **JSON** v
 | **Đăng nhập** | `POST` | `/api/auth/login` | `{"email", "password"}` | `200 OK` + `{ user, session }` *(Set-Cookie)* |
 | **Đăng xuất** | `POST` | `/api/auth/logout` | *(Trống)* | `200 OK` + `{"success": true}` |
 | **Xem hồ sơ cá nhân** | `GET` | `/api/auth/profile` | *(Trống - nhận diện qua Cookie)* | `200 OK` + `{"profile": {...}}` |
-| **Cập nhật hồ sơ** | `PATCH` | `/api/auth/profile` | `{"full_name"?, "phone"?}` | `200 OK` + `{"profile": {...}}` |
+| **Cập nhật hồ sơ** | `PATCH` | `/api/auth/profile` | `{"full_name"?, "phone"?, "avatar_url"?}` | `200 OK` + `{"profile": {...}}` |
 | **Tải lên ảnh đại diện** | `POST` | `/api/auth/profile/avatar` | `FormData: file = [ảnh .jpg/.png/.webp <= 5MB]` | `200 OK` + `{"profile": {...}}` |
+| **Xóa ảnh đại diện** | `DELETE` | `/api/auth/profile/avatar` | *(Trống - xóa avatar_url trong DB)* | `200 OK` + `{"profile": {...}}` |
 | **Quên mật khẩu** | `POST` | `/api/auth/forgot-password` | `{"email"}` | `200 OK` + `{"success": true}` |
 | **Đặt lại mật khẩu mới** | `POST` | `/api/auth/reset-password` | `{"password"}` | `200 OK` + `{"success": true}` |
 | **Đăng nhập Google** | `GET` | `/api/auth/google` | *(Truy cập trực tiếp qua thẻ `<a>`)* | `302 Redirect` tới Google Sign-In |
 | **Xác thực Callback** | `GET` | `/api/auth/callback` | Query params: `code`, `next` | `302 Redirect` về URL chỉ định |
+
+### Nhóm B: Quản lý Chuyến đi (Trips)
+
+| Chức năng | Phương thức | Endpoint | Body (JSON) | Response thành công |
+|---|---|---|---|---|
+| **Lấy danh sách chuyến đi** | `GET` | `/api/trips` | *(Trống - lấy chuyến đi của user)* | `200 OK` + `{"trips": [...]}` |
+| **Tạo chuyến đi mới** | `POST` | `/api/trips` | `{"name", "destination"?, "start_date"?, "end_date"?, "cover_image_url"?}` | `201 Created` + `{"trip": {...}}` |
+| **Xem chi tiết chuyến đi** | `GET` | `/api/trips/[tripId]` | *(Trống)* | `200 OK` + `{"trip": {...}}` |
+| **Cập nhật chuyến đi** | `PATCH` | `/api/trips/[tripId]` | `{"name"?, "destination"?, "start_date"?, "end_date"?, "cover_image_url"?}` | `200 OK` + `{"trip": {...}}` |
+| **Xóa chuyến đi** | `DELETE` | `/api/trips/[tripId]` | `{"reason"?}` *(Tự động cascade dọn sạch dữ liệu phụ thuộc)* | `200 OK` + `{"message": "Đã xóa chuyến đi thành công"}` |
+
+---
+
+## 🎨 Hệ thống Thiết kế & Trải nghiệm Người dùng (UI/UX)
+
+Ứng dụng được tối ưu hóa toàn diện về mặt tương tác và hiệu ứng chuyển động:
+
+### 1. Hiệu ứng Hover & Active trên toàn bộ nút bấm (Hover States)
+- Mọi nút bấm tương tác đều có hiệu ứng **nhấc nổi nhẹ (`-translate-y-0.5`)**, bóng đổ động (`box-shadow`), và hiệu ứng phản hồi xúc giác khi click (`active:translate-y-0 active:scale-[0.98]`).
+- Thẻ chuyến đi (Trip Cards) hỗ trợ hiệu ứng chuyển động mượt mà (`hover:-translate-y-1 hover:shadow-lg`).
+- Focus rings theo chuẩn trợ năng Web Content Accessibility Guidelines (`focus-visible:ring-2`).
+
+### 2. Loading Animations & Trạng thái tải dữ liệu
+- **Skeleton Shimmer Loading:** Thay thế spinner truyền thống ở trang Dashboard bằng 3 thẻ placeholder mô phỏng cấu trúc chuyến đi với hiệu ứng sóng ánh sáng `shimmer` mượt mà.
+- **Button Loading Spinners:** Tích hợp icon `<Loader2 className="animate-spinner" />` đồng bộ trên tất cả các hành động gửi dữ liệu:
+  - Đăng nhập, Đăng ký, Quên mật khẩu (`AuthCard`)
+  - Lưu hồ sơ cá nhân (`ProfileCard`)
+  - Tạo chuyến đi mới (`CreateTripModal`)
+  - Lưu cài đặt chuyến đi & Xác nhận xóa chuyến đi (`TripSettings`)
+- **Keyframe Animations:** Hệ thống CSS keyframe tùy biến trong `globals.css` bao gồm: `fadeInUp`, `slideUp`, `scaleUp`, `shimmer`, `bounceIn`, `spinSmooth`, `dotPulse`, `progressFill`.
+
+### 3. Chuẩn hóa & Xử lý Ngày tháng (Date Utilities)
+- Module `src/lib/date-utils.ts` tự động chuẩn hóa các định dạng ngày người dùng nhập (`DD/MM/YYYY`, `DD-MM-YYYY`, `YYYY-MM-DD`) sang chuẩn ISO `YYYY-MM-DD` cho PostgreSQL, đồng thời format hiển thị thân thiện chuẩn Việt Nam `DD/MM/YYYY`.
 
 ---
 
@@ -180,7 +228,7 @@ Hệ thống được thiết kế trên PostgreSQL với các bảng cốt lõi
 ## 🗺️ Lộ trình phát triển (Roadmap)
 
 - [x] **Nhóm A: Quản lý tài khoản & Người dùng** (Đăng ký, Đăng nhập, Profile, Avatar, Đổi mật khẩu, Google OAuth)
-- [ ] **Nhóm B: Quản lý chuyến đi (Trip)** (Tạo chuyến đi, Mời thành viên qua mã, Phân quyền Leader/Member)
+- [x] **Nhóm B: Quản lý chuyến đi (Trip)** (CRUD chuyến đi, Chuẩn hóa ngày tháng, Xóa an toàn có lý do, Modal tạo chuyến đi)
 - [ ] **Nhóm C: Lịch trình chi tiết (Itinerary)** (Tạo timeline theo ngày, kéo thả sắp xếp hoạt động)
 - [ ] **Nhóm D: Quản lý chi phí (Expense Splitting)** (Ghi nhận khoản chi, chia tiền, thuật toán tối ưu hóa công nợ "ai nợ ai")
 - [ ] **Nhóm E: Checklist & Đồ đạc (Packing List)** (Gán người phụ trách, đánh dấu hoàn thành)
