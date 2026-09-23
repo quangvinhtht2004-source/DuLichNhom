@@ -7,11 +7,10 @@ export const metadata: Metadata = {
 };
 
 interface PageProps {
-  params: Promise<{ id: string }>;
+  params: Promise<{ tripId: string }>;
 }
 
 export default async function TripSettingsPage({ params }: PageProps) {
-  const { id } = await params;
-  return <TripSettings tripId={id} />;
+  const { tripId } = await params;
+  return <TripSettings tripId={tripId} />;
 }
-
