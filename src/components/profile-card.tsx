@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useRef } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -17,6 +17,8 @@ import {
   Lock,
   Info,
   CheckCircle,
+  AlertCircle,
+  Check,
   X,
   KeyRound,
   Eye,
@@ -28,7 +30,17 @@ import {
   Compass,
 } from "lucide-react";
 
-export default function ProfileCard() {
+interface ProfileCardProps {
+  initialProfile?: {
+    full_name?: string;
+    avatar_url?: string | null;
+    phone?: string;
+    email?: string;
+    created_at?: string;
+  } | null;
+}
+
+export default function ProfileCard({ initialProfile: serverProfile }: ProfileCardProps = {}) {
   const router = useRouter();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -38,19 +50,46 @@ export default function ProfileCard() {
   // User menu dropdown
   const [showUserMenu, setShowUserMenu] = useState<boolean>(false);
 
-  // Success toast state
-  const [showToast, setShowToast] = useState<boolean>(true);
+  // Success/error toast state
+  const [showToast, setShowToast] = useState<boolean>(false);
+  const [toastInfo, setToastInfo] = useState<{
+    type: "success" | "error";
+    title: string;
+    text: string;
+  } | null>(null);
 
   // Profile Form State
-  const [avatarSrc, setAvatarSrc] = useState<string>(
-    "https://images.unsplash.com/photo-1534528741775-53994a69daeb?q=80&w=400&auto=format&fit=crop"
-  );
-  const [fullName, setFullName] = useState<string>("Lê Hải Yến");
-  const [phone, setPhone] = useState<string>("+84 912 345 678");
-  const [email] = useState<string>("haiyen.traveler@gmail.com");
+  const [avatarSrc, setAvatarSrc] = useState<string | null>(serverProfile?.avatar_url || null);
+  const [fullName, setFullName] = useState<string>(serverProfile?.full_name || "");
+  const [phone, setPhone] = useState<string>(serverProfile?.phone || "");
+  const [email, setEmail] = useState<string>(serverProfile?.email || "");
+  const [joinDate, setJoinDate] = useState<string>(() => {
+    if (serverProfile?.created_at) {
+      const d = new Date(serverProfile.created_at);
+      return `Tham gia từ Tháng ${d.getMonth() + 1}, ${d.getFullYear()}`;
+    }
+    return "Mới tham gia";
+  });
   const [bio, setBio] = useState<string>(
-    "Đam mê trekking, chụp ảnh phong cảnh và tổ chức các tour khám phá vùng cao cùng bạn bè. Thích lập kế hoạch chi tiết và chia sẻ chi phí minh bạch."
+    "Đam mê du lịch, khám phá và chia sẻ các chuyến đi cùng bạn bè."
   );
+
+  const [initialProfile, setInitialProfile] = useState<{
+    fullName: string;
+    phone: string;
+    avatarSrc: string | null;
+  } | null>(
+    serverProfile
+      ? {
+          fullName: serverProfile.full_name || "",
+          phone: serverProfile.phone || "",
+          avatarSrc: serverProfile.avatar_url || null,
+        }
+      : null
+  );
+
+  const [isSaving, setIsSaving] = useState<boolean>(false);
+  const [isUploadingAvatar, setIsUploadingAvatar] = useState<boolean>(false);
 
   // Password Form State
   const [currentPassword, setCurrentPassword] = useState<string>("");
@@ -60,60 +99,292 @@ export default function ProfileCard() {
   const [showCurrentPass, setShowCurrentPass] = useState<boolean>(false);
   const [showNewPass, setShowNewPass] = useState<boolean>(false);
   const [showConfirmPass, setShowConfirmPass] = useState<boolean>(false);
+  const [authProvider, setAuthProvider] = useState<string>("email");
+  const [isUpdatingPassword, setIsUpdatingPassword] = useState<boolean>(false);
 
   // Status message for password
-  const [passwordToast, setPasswordToast] = useState<string | null>(null);
+  const [passwordToast, setPasswordToast] = useState<{
+    type: "success" | "error";
+    text: string;
+  } | null>(null);
+
+  // Load Profile from API on Mount
+  useEffect(() => {
+    const fetchProfile = async () => {
+      try {
+        const res = await fetch("/api/auth/profile");
+        if (res.ok) {
+          const json = await res.json();
+          const p = json?.profile;
+          if (p) {
+            const name = p.full_name || "";
+            const tel = p.phone || "";
+            const mail = p.email || "";
+            const ava = p.avatar_url || null;
+            if (p.provider) setAuthProvider(p.provider);
+
+            setFullName(name);
+            setPhone(tel);
+            setEmail(mail);
+            setAvatarSrc(ava);
+
+            if (typeof window !== "undefined") {
+              if (name) sessionStorage.setItem("user_full_name", name);
+              if (ava) sessionStorage.setItem("user_avatar_url", ava);
+              if (mail) sessionStorage.setItem("user_email", mail);
+            }
+
+            if (p.created_at) {
+              const d = new Date(p.created_at);
+              setJoinDate(`Tham gia từ Tháng ${d.getMonth() + 1}, ${d.getFullYear()}`);
+            }
+
+            setInitialProfile({
+              fullName: name,
+              phone: tel,
+              avatarSrc: ava,
+            });
+          }
+        } else if (res.status === 401) {
+          router.push("/");
+        }
+      } catch (err) {
+        console.error("Lỗi tải thông tin hồ sơ:", err);
+      }
+    };
+    fetchProfile();
+  }, [router]);
+
+  // Helper: Get user initials
+  const getInitials = (name: string) => {
+    if (!name) return "U";
+    const parts = name.trim().split(" ");
+    if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+    return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+  };
 
   // Handle Avatar Upload
-  const handleAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleAvatarChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
       const reader = new FileReader();
       reader.onload = () => {
         if (typeof reader.result === "string") {
           setAvatarSrc(reader.result);
-          setShowToast(true);
         }
       };
       reader.readAsDataURL(file);
+
+      setIsUploadingAvatar(true);
+      try {
+        const formData = new FormData();
+        formData.append("file", file);
+        const res = await fetch("/api/auth/profile/avatar", {
+          method: "POST",
+          body: formData,
+        });
+        const data = await res.json();
+        if (res.ok && data?.profile?.avatar_url) {
+          setAvatarSrc(data.profile.avatar_url);
+          setToastInfo({
+            type: "success",
+            title: "Cập nhật ảnh đại diện thành công!",
+            text: "Ảnh đại diện mới đã được cập nhật an toàn.",
+          });
+          setShowToast(true);
+          setTimeout(() => setShowToast(false), 4000);
+        } else {
+          throw new Error(data.error || "Không thể tải lên ảnh đại diện");
+        }
+      } catch (err: any) {
+        setToastInfo({
+          type: "error",
+          title: "Tải ảnh đại diện thất bại",
+          text: err.message || "Vui lòng thử lại sau.",
+        });
+        setShowToast(true);
+      } finally {
+        setIsUploadingAvatar(false);
+      }
     }
   };
 
   // Handle Save Profile
-  const handleSaveProfile = (e: React.FormEvent) => {
+  const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
-    setShowToast(true);
+    setIsSaving(true);
+    setToastInfo(null);
+    try {
+      const res = await fetch("/api/auth/profile", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          full_name: fullName,
+          phone: phone,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || "Không thể cập nhật hồ sơ");
+      }
+      setInitialProfile({
+        fullName: fullName,
+        phone: phone,
+        avatarSrc: avatarSrc,
+      });
+      if (typeof window !== "undefined") {
+        sessionStorage.setItem("user_full_name", fullName);
+      }
+      setToastInfo({
+        type: "success",
+        title: "Cập nhật hồ sơ thành công!",
+        text: "Thông tin cá nhân của bạn đã được lưu an toàn trên TripTogether.",
+      });
+      setShowToast(true);
+      setTimeout(() => setShowToast(false), 4000);
+    } catch (err: any) {
+      setToastInfo({
+        type: "error",
+        title: "Cập nhật thất bại",
+        text: err.message || "Vui lòng kiểm tra lại thông tin.",
+      });
+      setShowToast(true);
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   // Handle Reset Form
   const handleResetProfile = () => {
-    setFullName("Lê Hải Yến");
-    setPhone("+84 912 345 678");
-    setBio(
-      "Đam mê trekking, chụp ảnh phong cảnh và tổ chức các tour khám phá vùng cao cùng bạn bè. Thích lập kế hoạch chi tiết và chia sẻ chi phí minh bạch."
-    );
+    if (initialProfile) {
+      setFullName(initialProfile.fullName);
+      setPhone(initialProfile.phone);
+      setAvatarSrc(initialProfile.avatarSrc);
+    }
   };
 
+  // Handle Logout
+  const handleLogout = async () => {
+    try {
+      if (typeof window !== "undefined") {
+        sessionStorage.removeItem("user_full_name");
+        sessionStorage.removeItem("user_avatar_url");
+        sessionStorage.removeItem("user_email");
+      }
+      await fetch("/api/auth/logout", { method: "POST" });
+    } finally {
+      router.push("/");
+      router.refresh();
+    }
+  };
+
+  // Helper: check birthday patterns
+  const isBirthdayPattern = (pwd: string) => {
+    if (!pwd) return false;
+    const delimitedDate = /\b(0[1-9]|[12]\d|3[01])[-/.](0[1-9]|1[0-2])[-/.](19\d{2}|20\d{2}|\d{2})\b/;
+    const delimitedDateRev = /\b(19\d{2}|20\d{2})[-/.](0[1-9]|1[0-2])[-/.](0[1-9]|[12]\d|3[01])\b/;
+    if (delimitedDate.test(pwd) || delimitedDateRev.test(pwd)) return true;
+
+    const ddmmyyyy = /(0[1-9]|[12]\d|3[01])(0[1-9]|1[0-2])(19\d{2}|20\d{2})/;
+    const yyyymmdd = /(19\d{2}|20\d{2})(0[1-9]|1[0-2])(0[1-9]|[12]\d|3[01])/;
+    const mmddyyyy = /(0[1-9]|1[0-2])(0[1-9]|[12]\d|3[01])(19\d{2}|20\d{2})/;
+    if (ddmmyyyy.test(pwd) || yyyymmdd.test(pwd) || mmddyyyy.test(pwd)) return true;
+
+    const ddmmyy = /(0[1-9]|[12]\d|3[01])(0[1-9]|1[0-2])(\d{2})/;
+    const yymmdd = /(\d{2})(0[1-9]|1[0-2])(0[1-9]|[12]\d|3[01])/;
+    if (ddmmyy.test(pwd) || yymmdd.test(pwd)) return true;
+
+    return false;
+  };
+
+  const isTypingNewPass = newPassword.length > 0;
+  const hasMinLengthAndDigit = newPassword.length >= 8 && /\d/.test(newPassword);
+  const hasUppercase = /[A-Z]/.test(newPassword);
+  const hasBirthday = isTypingNewPass && isBirthdayPattern(newPassword);
+  const isBirthdaySafe = isTypingNewPass && !hasBirthday;
+
   // Handle Update Password
-  const handleUpdatePassword = (e: React.FormEvent) => {
+  const handleUpdatePassword = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!currentPassword || !newPassword || !confirmPassword) {
-      setPasswordToast("Vui lòng điền đầy đủ thông tin mật khẩu!");
+
+    if (authProvider !== "google" && !currentPassword) {
+      setPasswordToast({ type: "error", text: "Vui lòng nhập mật khẩu hiện tại!" });
       return;
     }
+
+    if (!newPassword) {
+      setPasswordToast({ type: "error", text: "Vui lòng nhập mật khẩu mới!" });
+      return;
+    }
+
+    if (!hasMinLengthAndDigit) {
+      setPasswordToast({
+        type: "error",
+        text: "Mật khẩu mới phải có tối thiểu 8 ký tự và chứa ít nhất một chữ số!",
+      });
+      return;
+    }
+
+    if (!hasUppercase) {
+      setPasswordToast({
+        type: "error",
+        text: "Mật khẩu mới phải chứa ít nhất một ký tự viết hoa (A-Z)!",
+      });
+      return;
+    }
+
+    if (hasBirthday) {
+      setPasswordToast({
+        type: "error",
+        text: "Mật khẩu mới không được chứa định dạng ngày tháng năm sinh!",
+      });
+      return;
+    }
+
+    if (!confirmPassword) {
+      setPasswordToast({ type: "error", text: "Vui lòng nhập lại mật khẩu mới để xác nhận!" });
+      return;
+    }
+
     if (newPassword !== confirmPassword) {
-      setPasswordToast("Mật khẩu mới và xác nhận mật khẩu không khớp!");
+      setPasswordToast({ type: "error", text: "Mật khẩu mới và xác nhận mật khẩu không khớp!" });
       return;
     }
-    if (newPassword.length < 8) {
-      setPasswordToast("Mật khẩu mới phải có tối thiểu 8 ký tự!");
+
+    if (currentPassword && currentPassword === newPassword) {
+      setPasswordToast({
+        type: "error",
+        text: "Mật khẩu mới không được trùng với mật khẩu hiện tại!",
+      });
       return;
     }
-    setPasswordToast("Đổi mật khẩu thành công!");
-    setCurrentPassword("");
-    setNewPassword("");
-    setConfirmPassword("");
-    setTimeout(() => setPasswordToast(null), 4000);
+
+    setIsUpdatingPassword(true);
+    setPasswordToast(null);
+
+    try {
+      const res = await fetch("/api/auth/reset-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          password: newPassword,
+          current_password: currentPassword || undefined,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || "Đổi mật khẩu thất bại");
+      }
+      setPasswordToast({ type: "success", text: "Đổi mật khẩu thành công!" });
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
+    } catch (err: any) {
+      setPasswordToast({ type: "error", text: err.message || "Đổi mật khẩu thất bại" });
+    } finally {
+      setIsUpdatingPassword(false);
+      setTimeout(() => setPasswordToast(null), 5000);
+    }
   };
 
   return (
@@ -162,15 +433,21 @@ export default function ProfileCard() {
             <div className="relative">
               <button
                 onClick={() => setShowUserMenu(!showUserMenu)}
-                className="flex items-center gap-2 pl-1 pr-2.5 py-1 rounded-full border border-slate-200 hover:border-slate-300 transition-all bg-white"
+                className="flex items-center gap-2 pl-1 pr-2.5 py-1 rounded-full border border-slate-200 hover:border-slate-300 transition-all bg-white cursor-pointer"
               >
-                <img
-                  src={avatarSrc}
-                  alt={fullName}
-                  className="w-7 h-7 rounded-full object-cover ring-1 ring-slate-200"
-                />
+                {avatarSrc ? (
+                  <img
+                    src={avatarSrc}
+                    alt={fullName || "User"}
+                    className="w-7 h-7 rounded-full object-cover ring-1 ring-slate-200"
+                  />
+                ) : (
+                  <div className="w-7 h-7 rounded-full bg-[#004d53] text-white font-bold text-[10px] flex items-center justify-center ring-1 ring-slate-200">
+                    {getInitials(fullName)}
+                  </div>
+                )}
                 <span className="text-xs font-semibold text-slate-700">
-                  {fullName}
+                  {fullName || "Tài khoản"}
                 </span>
                 <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
               </button>
@@ -178,8 +455,8 @@ export default function ProfileCard() {
               {showUserMenu && (
                 <div className="absolute right-0 mt-2 w-48 bg-white rounded-2xl shadow-xl border border-slate-100 py-2 z-50 text-xs animate-fadeIn">
                   <div className="px-4 py-2 border-b border-slate-100">
-                    <p className="font-semibold text-slate-900">{fullName}</p>
-                    <p className="text-slate-400 text-[11px]">{email}</p>
+                    <p className="font-semibold text-slate-900">{fullName || "Người dùng"}</p>
+                    <p className="text-slate-400 text-[11px] truncate">{email || "Đang tải..."}</p>
                   </div>
                   <Link
                     href="/dashboard"
@@ -189,8 +466,8 @@ export default function ProfileCard() {
                     <span>Chuyến đi của tôi</span>
                   </Link>
                   <button
-                    onClick={() => router.push("/")}
-                    className="w-full text-left px-4 py-2 flex items-center gap-2 hover:bg-rose-50 text-rose-600"
+                    onClick={handleLogout}
+                    className="w-full text-left px-4 py-2 flex items-center gap-2 hover:bg-rose-50 text-rose-600 cursor-pointer"
                   >
                     <LogOut className="w-3.5 h-3.5 text-rose-500" />
                     <span>Đăng xuất</span>
@@ -222,23 +499,33 @@ export default function ProfileCard() {
             </p>
           </div>
 
-          {/* Success Toast Notification */}
-          {showToast && (
+          {/* Success / Error Toast Notification */}
+          {showToast && toastInfo && (
             <div className="bg-white border border-slate-200/90 shadow-lg shadow-slate-200/50 rounded-2xl p-4 flex items-start gap-3 max-w-md animate-fadeIn">
-              <div className="w-7 h-7 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0 mt-0.5">
-                <CheckCircle className="w-4 h-4" />
+              <div
+                className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 mt-0.5 ${
+                  toastInfo.type === "success"
+                    ? "bg-emerald-50 text-emerald-600"
+                    : "bg-rose-50 text-rose-600"
+                }`}
+              >
+                {toastInfo.type === "success" ? (
+                  <CheckCircle className="w-4 h-4" />
+                ) : (
+                  <AlertCircle className="w-4 h-4" />
+                )}
               </div>
               <div className="flex-1 pr-2">
                 <h4 className="text-xs font-bold text-slate-900">
-                  Cập nhật hồ sơ thành công!
+                  {toastInfo.title}
                 </h4>
                 <p className="text-[11px] text-slate-500 mt-0.5 leading-snug">
-                  Thông tin cá nhân của bạn đã được lưu an toàn trên TripTogether.
+                  {toastInfo.text}
                 </p>
               </div>
               <button
                 onClick={() => setShowToast(false)}
-                className="text-slate-400 hover:text-slate-600 p-0.5 rounded-md"
+                className="text-slate-400 hover:text-slate-600 p-0.5 rounded-md cursor-pointer"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -340,11 +627,17 @@ export default function ProfileCard() {
               <div className="flex flex-col sm:flex-row items-start sm:items-center gap-5 pb-6 border-b border-slate-100">
                 {/* Avatar with Camera Button */}
                 <div className="relative group shrink-0">
-                  <img
-                    src={avatarSrc}
-                    alt={fullName}
-                    className="w-24 h-24 rounded-full object-cover ring-4 ring-slate-100 shadow-sm"
-                  />
+                  {avatarSrc ? (
+                    <img
+                      src={avatarSrc}
+                      alt={fullName || "User"}
+                      className="w-24 h-24 rounded-full object-cover ring-4 ring-slate-100 shadow-sm"
+                    />
+                  ) : (
+                    <div className="w-24 h-24 rounded-full bg-gradient-to-tr from-[#004d53] to-teal-500 text-white font-bold text-2xl flex items-center justify-center ring-4 ring-slate-100 shadow-sm">
+                      {getInitials(fullName)}
+                    </div>
+                  )}
                   <input
                     type="file"
                     ref={fileInputRef}
@@ -355,8 +648,9 @@ export default function ProfileCard() {
                   <button
                     type="button"
                     onClick={() => fileInputRef.current?.click()}
+                    disabled={isUploadingAvatar}
                     title="Đổi ảnh đại diện"
-                    className="absolute bottom-0 right-0 w-8 h-8 rounded-full bg-[#004d53] text-white flex items-center justify-center border-2 border-white shadow-md hover:bg-[#00393d] transition-all cursor-pointer"
+                    className="absolute bottom-0 right-0 w-8 h-8 rounded-full bg-[#004d53] text-white flex items-center justify-center border-2 border-white shadow-md hover:bg-[#00393d] transition-all cursor-pointer disabled:opacity-50"
                   >
                     <Camera className="w-4 h-4" />
                   </button>
@@ -366,7 +660,7 @@ export default function ProfileCard() {
                 <div className="flex-1">
                   <div className="flex flex-wrap items-center gap-2">
                     <h2 className="text-xl font-bold text-slate-900">
-                      {fullName}
+                      {fullName || "Đang tải tên..."}
                     </h2>
                     <span className="px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-[#e6f4f8] text-[#0f6c82] border border-cyan-100">
                       Trưởng nhóm lữ hành
@@ -383,12 +677,12 @@ export default function ProfileCard() {
                   <div className="flex items-center gap-3 text-xs text-slate-500 mt-2 font-medium">
                     <span className="flex items-center gap-1">
                       <MapPin className="w-3.5 h-3.5 text-slate-400" />
-                      Hà Nội, Việt Nam
+                      Việt Nam
                     </span>
                     <span>•</span>
                     <span className="flex items-center gap-1">
                       <Calendar className="w-3.5 h-3.5 text-slate-400" />
-                      Tham gia từ Tháng 3, 2023
+                      {joinDate}
                     </span>
                   </div>
                 </div>
@@ -490,9 +784,10 @@ export default function ProfileCard() {
                   </button>
                   <button
                     type="submit"
-                    className="inline-flex items-center gap-1.5 px-6 py-2.5 rounded-xl bg-[#004d53] hover:bg-[#00383d] text-white text-xs font-semibold shadow-md shadow-teal-950/15 transition-all active:scale-[0.99] cursor-pointer"
+                    disabled={isSaving}
+                    className="inline-flex items-center gap-1.5 px-6 py-2.5 rounded-xl bg-[#004d53] hover:bg-[#00383d] text-white text-xs font-semibold shadow-md shadow-teal-950/15 transition-all active:scale-[0.99] cursor-pointer disabled:opacity-60"
                   >
-                    <span>✓ Lưu thay đổi</span>
+                    <span>{isSaving ? "Đang lưu..." : "✓ Lưu thay đổi"}</span>
                   </button>
                 </div>
               </form>
@@ -515,9 +810,19 @@ export default function ProfileCard() {
               </div>
 
               {passwordToast && (
-                <div className="mt-4 p-3 rounded-xl text-xs bg-sky-50 text-sky-800 border border-sky-200 flex items-center gap-2">
-                  <CheckCircle className="w-4 h-4 text-sky-600" />
-                  <span>{passwordToast}</span>
+                <div
+                  className={`mt-4 p-3 rounded-xl text-xs flex items-center gap-2 ${
+                    passwordToast.type === "success"
+                      ? "bg-emerald-50 text-emerald-800 border border-emerald-200"
+                      : "bg-rose-50 text-rose-800 border border-rose-200"
+                  }`}
+                >
+                  {passwordToast.type === "success" ? (
+                    <CheckCircle className="w-4 h-4 text-emerald-600 shrink-0" />
+                  ) : (
+                    <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                  )}
+                  <span>{passwordToast.text}</span>
                 </div>
               )}
 
@@ -597,26 +902,58 @@ export default function ProfileCard() {
 
                 {/* Password Criteria Pills */}
                 <div className="flex flex-wrap items-center gap-2 pt-1">
+                  {/* 1. Tối thiểu 8 ký tự kèm chữ số */}
                   <span
-                    className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-[11px] font-medium border ${
-                      newPassword.length >= 8 && /\d/.test(newPassword)
-                        ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                    className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-medium border transition-all duration-150 ${
+                      hasMinLengthAndDigit
+                        ? "bg-emerald-50 text-emerald-700 border-emerald-300 font-semibold shadow-xs"
                         : "bg-slate-50 text-slate-500 border-slate-200"
                     }`}
                   >
-                    ✓ Tối thiểu 8 ký tự kèm chữ số
+                    {hasMinLengthAndDigit ? (
+                      <Check className="w-3.5 h-3.5 text-emerald-600" />
+                    ) : (
+                      <span className="text-slate-400">✓</span>
+                    )}
+                    <span>Tối thiểu 8 ký tự kèm chữ số</span>
                   </span>
+
+                  {/* 2. Có ít nhất một ký tự viết hoa */}
                   <span
-                    className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-[11px] font-medium border ${
-                      /[A-Z]/.test(newPassword)
-                        ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                    className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-medium border transition-all duration-150 ${
+                      hasUppercase
+                        ? "bg-emerald-50 text-emerald-700 border-emerald-300 font-semibold shadow-xs"
                         : "bg-slate-50 text-slate-500 border-slate-200"
                     }`}
                   >
-                    ✓ Có ít nhất một ký tự viết hoa
+                    {hasUppercase ? (
+                      <Check className="w-3.5 h-3.5 text-emerald-600" />
+                    ) : (
+                      <span className="text-slate-400">✓</span>
+                    )}
+                    <span>Có ít nhất một ký tự viết hoa</span>
                   </span>
-                  <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-[11px] font-medium bg-slate-50 text-slate-500 border border-slate-200">
-                    ✓ Không trùng ngày sinh
+
+                  {/* 3. Không trùng ngày sinh */}
+                  <span
+                    className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-medium border transition-all duration-150 ${
+                      hasBirthday
+                        ? "bg-rose-50 text-rose-700 border-rose-300 font-semibold shadow-xs"
+                        : isBirthdaySafe
+                        ? "bg-emerald-50 text-emerald-700 border-emerald-300 font-semibold shadow-xs"
+                        : "bg-slate-50 text-slate-500 border-slate-200"
+                    }`}
+                  >
+                    {hasBirthday ? (
+                      <X className="w-3.5 h-3.5 text-rose-600" />
+                    ) : isBirthdaySafe ? (
+                      <Check className="w-3.5 h-3.5 text-emerald-600" />
+                    ) : (
+                      <span className="text-slate-400">✓</span>
+                    )}
+                    <span>
+                      {hasBirthday ? "Trùng định dạng ngày sinh" : "Không trùng ngày sinh"}
+                    </span>
                   </span>
                 </div>
 
@@ -624,10 +961,11 @@ export default function ProfileCard() {
                 <div className="flex justify-end pt-3">
                   <button
                     type="submit"
-                    className="inline-flex items-center gap-1.5 px-6 py-2.5 rounded-xl bg-[#006070] hover:bg-[#004d5a] text-white text-xs font-semibold shadow-md transition-all active:scale-[0.99] cursor-pointer"
+                    disabled={isUpdatingPassword}
+                    className="inline-flex items-center gap-1.5 px-6 py-2.5 rounded-xl bg-[#006070] hover:bg-[#004d5a] text-white text-xs font-semibold shadow-md transition-all active:scale-[0.99] cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
                   >
                     <KeyRound className="w-3.5 h-3.5" />
-                    <span>Cập nhật mật khẩu</span>
+                    <span>{isUpdatingPassword ? "Đang cập nhật..." : "Cập nhật mật khẩu"}</span>
                   </button>
                 </div>
               </form>
