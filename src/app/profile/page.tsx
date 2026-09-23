@@ -6,8 +6,8 @@ export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 export const metadata: Metadata = {
-  title: "Hồ sơ cá nhân | TripTogether",
-  description: "Quản lý thông tin tài khoản và tùy chọn bảo mật cho các chuyến đi nhóm TripTogether.",
+  title: "Hồ sơ cá nhân | Trippo",
+  description: "Quản lý thông tin tài khoản và cách bạn hiển thị với các thành viên khác trong nhóm du lịch Trippo.",
 };
 
 export default async function ProfilePage() {
