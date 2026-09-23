@@ -3,14 +3,15 @@ import { createClient } from '@/lib/supabase/server'
 import type { TablesUpdate } from '@/types/database'
 
 interface RouteContext {
-  params: Promise<{ id: string }>
+  params: Promise<{ tripId: string }>
 }
 
 // GET: Lấy thông tin chi tiết một chuyến đi từ Supabase Database
 export async function GET(request: Request, context: RouteContext) {
   try {
-    const { id } = await context.params
-    if (!id) {
+    const params = await context.params
+    const tripId = params.tripId || (params as any).id
+    if (!tripId) {
       return NextResponse.json({ error: 'Thiếu ID chuyến đi' }, { status: 400 })
     }
 
@@ -35,7 +36,7 @@ export async function GET(request: Request, context: RouteContext) {
           status
         )
       `)
-      .eq('id', id)
+      .eq('id', tripId)
       .maybeSingle()
 
     if (error) {
@@ -58,8 +59,9 @@ export async function GET(request: Request, context: RouteContext) {
 // PATCH: Cập nhật thông tin chuyến đi trong bảng 'trips'
 export async function PATCH(request: Request, context: RouteContext) {
   try {
-    const { id } = await context.params
-    if (!id) {
+    const params = await context.params
+    const tripId = params.tripId || (params as any).id
+    if (!tripId) {
       return NextResponse.json({ error: 'Thiếu ID chuyến đi' }, { status: 400 })
     }
 
@@ -76,8 +78,6 @@ export async function PATCH(request: Request, context: RouteContext) {
       start_date,
       end_date,
       cover_image_url,
-      description,
-      is_private,
     } = body || {}
 
     const supabase = await createClient()
@@ -95,7 +95,7 @@ export async function PATCH(request: Request, context: RouteContext) {
     const { data: updatedTrip, error } = await supabase
       .from('trips')
       .update(updates)
-      .eq('id', id)
+      .eq('id', tripId)
       .select()
       .single()
 
@@ -119,21 +119,23 @@ export async function PATCH(request: Request, context: RouteContext) {
 // DELETE: Xóa vĩnh viễn chuyến đi khỏi Supabase Database (VÙNG NGUY HIỂM)
 export async function DELETE(request: Request, context: RouteContext) {
   try {
-    const { id } = await context.params
-    if (!id) {
+    const params = await context.params
+    const tripId = params.tripId || (params as any).id
+    if (!tripId) {
       return NextResponse.json({ error: 'Thiếu ID chuyến đi' }, { status: 400 })
     }
 
     const supabase = await createClient()
 
-    // 1. Xóa toàn bộ thành viên trong trip_members liên kết với chuyến đi này
-    await supabase.from('trip_members').delete().eq('trip_id', id)
+    // 1. Xóa các bản ghi liên quan trong trip_members và trip_invites
+    await supabase.from('trip_members').delete().eq('trip_id', tripId)
+    await supabase.from('trip_invites').delete().eq('trip_id', tripId)
 
     // 2. Xóa chuyến đi khỏi bảng trips
     const { error: deleteTripError } = await supabase
       .from('trips')
       .delete()
-      .eq('id', id)
+      .eq('id', tripId)
 
     if (deleteTripError) {
       return NextResponse.json({ error: deleteTripError.message }, { status: 400 })
