@@ -21,10 +21,47 @@ export async function GET() {
     .single()
 
   if (error) {
+    // If profile row doesn't exist yet (e.g. fresh Google OAuth sign-in), fallback to user metadata
+    if (error.code === 'PGRST116') {
+      const fallbackProfile = {
+        id: user.id,
+        full_name:
+          user.user_metadata?.full_name ||
+          user.user_metadata?.name ||
+          user.email?.split('@')[0] ||
+          'Người dùng',
+        avatar_url:
+          user.user_metadata?.avatar_url ||
+          user.user_metadata?.picture ||
+          null,
+        phone: user.phone || null,
+        created_at: user.created_at,
+        updated_at: new Date().toISOString(),
+      }
+
+      try {
+        await supabase.from('profiles').upsert(fallbackProfile, { onConflict: 'id' })
+      } catch {
+        // Continue even if database policy restricts upsert
+      }
+
+      const provider =
+        user.app_metadata?.provider ||
+        (user.identities && user.identities[0]?.provider) ||
+        'email'
+
+      return NextResponse.json({ profile: { ...fallbackProfile, email: user.email, provider } })
+    }
+
     return NextResponse.json({ error: error.message }, { status: 400 })
   }
 
-  return NextResponse.json({ profile: data })
+  const provider =
+    user.app_metadata?.provider ||
+    (user.identities && user.identities[0]?.provider) ||
+    'email'
+
+  return NextResponse.json({ profile: { ...data, email: user.email, provider } })
 }
 
 export async function PATCH(request: Request) {
@@ -66,5 +103,5 @@ export async function PATCH(request: Request) {
     return NextResponse.json({ error: error.message }, { status: 400 })
   }
 
-  return NextResponse.json({ profile: data })
+  return NextResponse.json({ profile: { ...data, email: user.email } })
 }

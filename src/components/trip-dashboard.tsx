@@ -45,13 +45,51 @@ interface TripItem {
   progress: number;
 }
 
-export default function TripDashboard() {
+interface TripDashboardProps {
+  initialProfile?: {
+    full_name?: string;
+    avatar_url?: string | null;
+    email?: string;
+  } | null;
+}
+
+export default function TripDashboard({ initialProfile }: TripDashboardProps = {}) {
   const router = useRouter();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // User State
-  const [userName, setUserName] = useState<string>("Hoàng Nam");
-  const [userAvatar, setUserAvatar] = useState<string | null>(null);
+  // Helper: Get user initials
+  const getInitials = (name: string) => {
+    if (!name || name === "Bạn") return "U";
+    const parts = name.trim().split(" ");
+    if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+    return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+  };
+
+  // User State with instant client-side cache fallback
+  const [userName, setUserName] = useState<string>(() => {
+    if (initialProfile?.full_name) return initialProfile.full_name;
+    if (typeof window !== "undefined") {
+      const saved = sessionStorage.getItem("user_full_name");
+      if (saved) return saved;
+    }
+    return "Bạn";
+  });
+  const [userAvatar, setUserAvatar] = useState<string | null>(() => {
+    if (initialProfile?.avatar_url) return initialProfile.avatar_url;
+    if (typeof window !== "undefined") {
+      const saved = sessionStorage.getItem("user_avatar_url");
+      if (saved) return saved;
+    }
+    return null;
+  });
+  const [userEmail, setUserEmail] = useState<string>(() => {
+    if (initialProfile?.email) return initialProfile.email;
+    if (typeof window !== "undefined") {
+      const saved = sessionStorage.getItem("user_email");
+      if (saved) return saved;
+    }
+    return "";
+  });
   const [showUserMenu, setShowUserMenu] = useState<boolean>(false);
 
   // Tabs & Views
@@ -143,9 +181,21 @@ export default function TripDashboard() {
           const json = await res.json();
           if (json?.profile?.full_name) {
             setUserName(json.profile.full_name);
+            if (typeof window !== "undefined") {
+              sessionStorage.setItem("user_full_name", json.profile.full_name);
+            }
           }
           if (json?.profile?.avatar_url) {
             setUserAvatar(json.profile.avatar_url);
+            if (typeof window !== "undefined") {
+              sessionStorage.setItem("user_avatar_url", json.profile.avatar_url);
+            }
+          }
+          if (json?.profile?.email) {
+            setUserEmail(json.profile.email);
+            if (typeof window !== "undefined") {
+              sessionStorage.setItem("user_email", json.profile.email);
+            }
           }
         }
       } catch {
@@ -158,6 +208,11 @@ export default function TripDashboard() {
   // Handle Logout
   const handleLogout = async () => {
     try {
+      if (typeof window !== "undefined") {
+        sessionStorage.removeItem("user_full_name");
+        sessionStorage.removeItem("user_avatar_url");
+        sessionStorage.removeItem("user_email");
+      }
       await fetch("/api/auth/logout", { method: "POST" });
     } finally {
       router.push("/");
@@ -212,7 +267,7 @@ export default function TripDashboard() {
       endDate: newTripEndDate,
       location: newTripLocation || "Việt Nam",
       members: [
-        { initials: userName.slice(0, 2).toUpperCase(), bg: "bg-indigo-600" },
+        { initials: getInitials(userName), bg: "bg-indigo-600" },
       ],
       extraMembers: 0,
       progress: 10,
@@ -373,7 +428,7 @@ export default function TripDashboard() {
                   />
                 ) : (
                   <div className="w-7 h-7 rounded-full bg-indigo-600 text-white flex items-center justify-center text-xs font-bold shadow-sm">
-                    {userName.slice(0, 2).toUpperCase()}
+                    {getInitials(userName)}
                   </div>
                 )}
                 <span className="text-xs font-bold text-slate-800 hidden sm:inline">
@@ -386,7 +441,7 @@ export default function TripDashboard() {
                 <div className="absolute right-0 mt-2 w-48 bg-white rounded-2xl shadow-xl border border-slate-100 py-2 z-50 text-xs animate-fadeIn">
                   <div className="px-4 py-2 border-b border-slate-100">
                     <p className="font-bold text-slate-900">{userName}</p>
-                    <p className="text-slate-400 text-[11px]">Đang đăng nhập</p>
+                    <p className="text-slate-400 text-[11px] truncate">{userEmail || "Đang đăng nhập"}</p>
                   </div>
                   <Link
                     href="/profile"
@@ -1184,7 +1239,7 @@ export default function TripDashboard() {
                   disabled={apiTestingLoading}
                   onClick={() =>
                     executeApiTest("/api/auth/profile", "PATCH", {
-                      full_name: "Hoàng Nam (Đã cập nhật)",
+                      full_name: "Vinked Twice (Đã cập nhật)",
                       phone: "0987654321",
                     })
                   }
