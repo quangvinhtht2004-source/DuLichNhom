@@ -3,6 +3,9 @@
 import React, { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import CreateTripModal from "./create-trip-modal";
+import InviteFriendsModal from "./invite-friends-modal";
+import TripInviteModal from "./trip-invite-modal";
 import {
   Search,
   Plus,
@@ -29,6 +32,7 @@ import {
   Play,
   RotateCcw,
   ExternalLink,
+  Sliders,
 } from "lucide-react";
 
 interface TripItem {
@@ -72,7 +76,7 @@ export default function TripDashboard({ initialProfile }: TripDashboardProps = {
       const saved = sessionStorage.getItem("user_full_name");
       if (saved) return saved;
     }
-    return "Bạn";
+    return "Hoàng Nam";
   });
   const [userAvatar, setUserAvatar] = useState<string | null>(() => {
     if (initialProfile?.avatar_url) return initialProfile.avatar_url;
@@ -96,47 +100,17 @@ export default function TripDashboard({ initialProfile }: TripDashboardProps = {
   const [activeFilterTab, setActiveFilterTab] = useState<"upcoming" | "completed" | "invites">("upcoming");
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
 
-  // Trips List State
-  const [trips, setTrips] = useState<TripItem[]>([
-    {
-      id: "trip-1",
-      title: "Oanh tạc Đà Lạt 3N2Đ cùng Hội bạn thân",
-      role: "Trưởng nhóm",
-      badgeDays: "Còn 3 ngày nữa",
-      coverImage: "https://images.unsplash.com/photo-1506744038136-46273834b3fb?q=80&w=800&auto=format&fit=crop",
-      startDate: "15/10/2026",
-      endDate: "18/10/2026",
-      location: "Đà Lạt, Lâm Đồng",
-      members: [
-        { initials: "HN", bg: "bg-indigo-600" },
-        { initials: "MA", bg: "bg-purple-600" },
-        { initials: "TK", bg: "bg-rose-600" },
-        { initials: "LP", bg: "bg-pink-600" },
-      ],
-      extraMembers: 2,
-      progress: 70,
-    },
-    {
-      id: "trip-2",
-      title: "Vitamin Sea Phú Quốc Resort & Sunset Chill",
-      role: "Thành viên",
-      badgeDays: "Còn 18 ngày nữa",
-      coverImage: "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?q=80&w=800&auto=format&fit=crop",
-      startDate: "02/11/2026",
-      endDate: "05/11/2026",
-      location: "Phú Quốc, Kiên Giang",
-      members: [
-        { initials: "QT", bg: "bg-teal-600" },
-        { initials: "HN", bg: "bg-indigo-600" },
-        { initials: "VT", bg: "bg-orange-600" },
-      ],
-      extraMembers: 4,
-      progress: 45,
-    },
-  ]);
+  // Trips List State (Real Data from Supabase)
+  const [trips, setTrips] = useState<TripItem[]>([]);
+  const [isLoadingTrips, setIsLoadingTrips] = useState<boolean>(true);
+  const [openMenuTripId, setOpenMenuTripId] = useState<string | null>(null);
 
-  // Invitation State
+  // Invitation States & Modals
   const [hasInvite, setHasInvite] = useState<boolean>(true);
+  const [showInviteModal, setShowInviteModal] = useState<boolean>(false);
+  const [showInviteFriendsModal, setShowInviteFriendsModal] = useState<boolean>(false);
+  const [showAlertBanner, setShowAlertBanner] = useState<boolean>(true);
+  const [showNotifications, setShowNotifications] = useState<boolean>(false);
 
   // Voting State
   const [votes, setVotes] = useState<{ option1: number; option2: number; voted: string | null }>({
@@ -153,13 +127,6 @@ export default function TripDashboard({ initialProfile }: TripDashboardProps = {
 
   // Create Trip Modal
   const [showCreateModal, setShowCreateModal] = useState<boolean>(false);
-  const [newTripTitle, setNewTripTitle] = useState("");
-  const [newTripLocation, setNewTripLocation] = useState("");
-  const [newTripStartDate, setNewTripStartDate] = useState("20/12/2026");
-  const [newTripEndDate, setNewTripEndDate] = useState("24/12/2026");
-  const [newTripCover, setNewTripCover] = useState(
-    "https://images.unsplash.com/photo-1511497584788-87676104235f?q=80&w=800&auto=format&fit=crop"
-  );
 
   // API Tester Drawer State (Full 9 APIs testing on UI)
   const [showApiTester, setShowApiTester] = useState<boolean>(false);
@@ -172,7 +139,49 @@ export default function TripDashboard({ initialProfile }: TripDashboardProps = {
     time: string;
   } | null>(null);
 
-  // Load User Profile from Supabase on Mount
+  // Fetch Trips directly from Supabase Database
+  const fetchTrips = async () => {
+    try {
+      setIsLoadingTrips(true);
+      const res = await fetch("/api/trips");
+      if (res.ok) {
+        const json = await res.json();
+        if (json?.trips && Array.isArray(json.trips)) {
+          const mappedTrips: TripItem[] = json.trips.map((t: any) => ({
+            id: t.id,
+            title: t.name,
+            role: t.trip_members?.some((m: any) => m.role === "owner")
+              ? "Trưởng nhóm"
+              : "Thành viên",
+            badgeDays: "Sắp diễn ra",
+            coverImage:
+              t.cover_image_url ||
+              "https://images.unsplash.com/photo-1506744038136-46273834b3fb?q=80&w=800&auto=format&fit=crop",
+            startDate: t.start_date || "15/10/2026",
+            endDate: t.end_date || "18/10/2026",
+            location: t.destination || "Việt Nam",
+            members: [
+              { initials: "HN", bg: "bg-indigo-600" },
+              { initials: "MA", bg: "bg-purple-600" },
+              { initials: "TK", bg: "bg-rose-600" },
+            ],
+            extraMembers:
+              t.trip_members && t.trip_members.length > 3
+                ? t.trip_members.length - 3
+                : 2,
+            progress: 60,
+          }));
+          setTrips(mappedTrips);
+        }
+      }
+    } catch (err) {
+      console.error("Error fetching trips from database:", err);
+    } finally {
+      setIsLoadingTrips(false);
+    }
+  };
+
+  // Load User Profile and Real Trips from Supabase on Mount
   useEffect(() => {
     const fetchProfile = async () => {
       try {
@@ -203,6 +212,7 @@ export default function TripDashboard({ initialProfile }: TripDashboardProps = {
       }
     };
     fetchProfile();
+    fetchTrips();
   }, []);
 
   // Handle Logout
@@ -230,12 +240,24 @@ export default function TripDashboard({ initialProfile }: TripDashboardProps = {
     }
   };
 
-  // Handle Change Trip Cover Image
-  const handleSaveCoverImage = (url: string) => {
+  // Handle Change Trip Cover Image (Syncs directly to Supabase DB)
+  const handleSaveCoverImage = async (url: string) => {
     if (!editingTripId) return;
     setTrips(
       trips.map((t) => (t.id === editingTripId ? { ...t, coverImage: url } : t))
     );
+    try {
+      await fetch("/api/trips", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: editingTripId,
+          cover_image_url: url,
+        }),
+      });
+    } catch (err) {
+      console.error("Error updating cover image in database:", err);
+    }
     setEditingTripId(null);
   };
 
@@ -253,29 +275,41 @@ export default function TripDashboard({ initialProfile }: TripDashboardProps = {
     }
   };
 
-  // Handle Create Trip
-  const handleCreateTripSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newTripTitle) return;
-    const newTrip: TripItem = {
-      id: `trip-${Date.now()}`,
-      title: newTripTitle,
-      role: "Trưởng nhóm",
-      badgeDays: "Mới tạo",
-      coverImage: newTripCover,
-      startDate: newTripStartDate,
-      endDate: newTripEndDate,
-      location: newTripLocation || "Việt Nam",
+  // Callback when a new trip is successfully saved to Supabase Database
+  const handleTripCreated = (newTrip: any) => {
+    fetchTrips();
+  };
+
+  // Handle Accept Trip Invitation
+  const handleAcceptInvite = () => {
+    const newAcceptedTrip: TripItem = {
+      id: `trip-dalat-${Date.now()}`,
+      title: "Oanh tạc Đà Lạt 3N2Đ cùng Hội bạn thân 🌲",
+      role: "Thành viên",
+      badgeDays: "Sắp khởi hành",
+      coverImage:
+        "https://images.unsplash.com/photo-1506744038136-46273834b3fb?q=80&w=800&auto=format&fit=crop",
+      startDate: "15/10/2026",
+      endDate: "18/10/2026",
+      location: "Đà Lạt, Lâm Đồng",
       members: [
+        { initials: "MA", bg: "bg-purple-600" },
         { initials: getInitials(userName), bg: "bg-indigo-600" },
+        { initials: "TL", bg: "bg-rose-600" },
+        { initials: "HM", bg: "bg-amber-600" },
       ],
-      extraMembers: 0,
-      progress: 10,
+      extraMembers: 1,
+      progress: 20,
     };
-    setTrips([newTrip, ...trips]);
-    setShowCreateModal(false);
-    setNewTripTitle("");
-    setNewTripLocation("");
+    setTrips([newAcceptedTrip, ...trips]);
+    setHasInvite(false);
+    setShowAlertBanner(false);
+  };
+
+  // Handle Decline Trip Invitation
+  const handleDeclineInvite = () => {
+    setHasInvite(false);
+    setShowAlertBanner(false);
   };
 
   // Preset Cover Photos for Quick Selection
@@ -408,11 +442,71 @@ export default function TripDashboard({ initialProfile }: TripDashboardProps = {
               <span>Tạo chuyến đi mới</span>
             </button>
 
-            {/* Notification Bell */}
-            <button className="relative p-2 rounded-xl text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition-all">
-              <Bell className="w-4 h-4" />
-              <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-rose-500 rounded-full ring-2 ring-white" />
-            </button>
+            {/* Notification Bell (Vị trí 3: Quả chuông thông báo) */}
+            <div className="relative">
+              <button
+                onClick={() => setShowNotifications(!showNotifications)}
+                className="relative p-2 rounded-xl text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition-all cursor-pointer"
+                title="Thông báo"
+              >
+                <Bell className="w-4 h-4" />
+                {hasInvite && (
+                  <span className="absolute top-1.5 right-1.5 w-2.5 h-2.5 bg-rose-500 rounded-full ring-2 ring-white animate-pulse" />
+                )}
+              </button>
+
+              {showNotifications && (
+                <div className="absolute right-0 mt-2 w-80 bg-white rounded-2xl shadow-2xl border border-slate-100 py-3 z-50 text-xs animate-fadeIn">
+                  <div className="px-4 pb-2.5 border-b border-slate-100 flex items-center justify-between">
+                    <span className="font-extrabold text-slate-900">
+                      Thông báo {hasInvite ? "(1)" : "(0)"}
+                    </span>
+                    {hasInvite && (
+                      <span className="text-[10px] font-bold text-rose-600 bg-rose-50 px-2 py-0.5 rounded-md border border-rose-100">
+                        1 lời mời mới
+                      </span>
+                    )}
+                  </div>
+
+                  {hasInvite ? (
+                    <div
+                      onClick={() => {
+                        setShowNotifications(false);
+                        setShowInviteModal(true);
+                      }}
+                      className="p-3.5 hover:bg-indigo-50/50 transition-colors cursor-pointer border-b border-slate-50 flex items-start gap-3"
+                    >
+                      <div className="relative shrink-0">
+                        <img
+                          src="https://images.unsplash.com/photo-1494790108377-be9c29b29330?q=80&w=120&auto=format&fit=crop"
+                          alt="Minh Anh"
+                          className="w-9 h-9 rounded-full object-cover ring-1 ring-slate-200"
+                        />
+                        <span className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full bg-rose-500 text-white flex items-center justify-center text-[8px]">
+                          ❤
+                        </span>
+                      </div>
+                      <div className="flex-1">
+                        <p className="text-slate-800 leading-snug">
+                          <strong className="text-slate-900">Minh Anh</strong> đã gửi lời mời tham gia chuyến đi{" "}
+                          <strong className="text-indigo-600">"Oanh tạc Đà Lạt 3N2Đ"</strong>.
+                        </p>
+                        <div className="flex items-center justify-between mt-1.5">
+                          <span className="text-[10px] text-slate-400">2 giờ trước</span>
+                          <span className="text-[11px] font-bold text-indigo-600 hover:underline">
+                            Xem ngay →
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="py-8 text-center text-slate-400 text-xs">
+                      Bạn không có thông báo mới nào
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
 
             {/* User Dropdown */}
             <div className="relative">
@@ -465,6 +559,54 @@ export default function TripDashboard({ initialProfile }: TripDashboardProps = {
       </header>
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 pt-6 space-y-6">
+        {/* VỊ TRÍ 2: THANH BANNER NỔI BẬT DƯỚI HEADER (ALERT / INVITATION BANNER) */}
+        {hasInvite && showAlertBanner && (
+          <div className="bg-gradient-to-r from-purple-100/90 via-pink-100/80 to-indigo-100/80 border border-purple-200/90 rounded-2xl p-4 sm:px-6 sm:py-3.5 shadow-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 animate-fadeIn">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-xl bg-purple-600 text-white flex items-center justify-center shrink-0 shadow-sm shadow-purple-600/25">
+                <Sparkles className="w-4 h-4" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="text-[11px] font-extrabold px-2.5 py-0.5 rounded-full bg-rose-500 text-white uppercase tracking-wider">
+                    Lời mời mới
+                  </span>
+                  <span className="text-xs font-bold text-slate-900">
+                    Minh Anh vừa gửi lời mời bạn tham gia: Oanh tạc Đà Lạt 3N2Đ cùng Hội bạn thân 🌲
+                  </span>
+                </div>
+                <p className="text-[11px] text-slate-600 mt-0.5 hidden md:block">
+                  Khởi hành 15/10/2026. Lên lịch trình sống ảo, phân chia chi phí minh bạch và bình chọn điểm check-in hấp dẫn!
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 self-end sm:self-auto shrink-0">
+              <button
+                type="button"
+                onClick={() => setShowInviteModal(true)}
+                className="px-4 py-2 rounded-xl text-xs font-bold text-white bg-gradient-to-r from-indigo-600 to-purple-600 hover:opacity-95 shadow-sm transition-all cursor-pointer"
+              >
+                Xem chi tiết & Tham gia
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowAlertBanner(false)}
+                className="px-3 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-white/60 transition-colors cursor-pointer"
+              >
+                Để sau
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowAlertBanner(false)}
+                className="p-2 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-white/60 transition-colors cursor-pointer"
+                title="Ẩn thông báo"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </div>
+        )}
         {/* 2. WELCOME BANNER & 3 METRIC CARDS */}
         <div className="bg-gradient-to-r from-[#f4f3ff] via-[#f7f6fe] to-[#fbfaff] rounded-3xl p-6 sm:p-8 border border-purple-100/70 shadow-sm flex flex-col lg:flex-row items-start lg:items-center justify-between gap-6">
           {/* Welcome Text Left */}
@@ -615,8 +757,14 @@ export default function TripDashboard({ initialProfile }: TripDashboardProps = {
 
         {/* 4. MAIN TRIP GRID (TRIP CARDS + INVITATION) */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 items-start">
-          {/* TRIP CARD 1: ĐÀ LẠT */}
-          {trips.map((trip) => (
+          {isLoadingTrips && trips.length === 0 && (
+            <div className="col-span-full py-12 flex flex-col items-center justify-center text-slate-400 gap-3">
+              <div className="w-8 h-8 rounded-full border-2 border-indigo-600 border-t-transparent animate-spin"></div>
+              <span className="text-xs font-medium">Đang tải danh sách chuyến đi từ cơ sở dữ liệu Supabase...</span>
+            </div>
+          )}
+
+          {activeFilterTab === "upcoming" && trips.map((trip) => (
             <div
               key={trip.id}
               className="bg-white rounded-3xl border border-slate-200/80 shadow-sm hover:shadow-md transition-all overflow-hidden flex flex-col justify-between group"
@@ -637,14 +785,50 @@ export default function TripDashboard({ initialProfile }: TripDashboardProps = {
                     <span>{trip.badgeDays}</span>
                   </div>
 
-                  {/* Top Right: Edit Cover Image Button (Requirement: có thể chỉnh sửa được ảnh) */}
-                  <button
-                    onClick={() => openEditCoverModal(trip.id)}
-                    title="Chỉnh sửa ảnh bìa chuyến đi"
-                    className="absolute top-3.5 right-3.5 w-8 h-8 rounded-full bg-white/90 hover:bg-white text-slate-700 flex items-center justify-center shadow-md transition-all cursor-pointer"
-                  >
-                    <MoreVertical className="w-4 h-4" />
-                  </button>
+                  {/* Top Right: Options Menu Button */}
+                  <div className="absolute top-3.5 right-3.5 z-20">
+                    <button
+                      onClick={() =>
+                        setOpenMenuTripId(openMenuTripId === trip.id ? null : trip.id)
+                      }
+                      title="Tùy chọn chuyến đi"
+                      className="w-8 h-8 rounded-full bg-white/90 hover:bg-white text-slate-700 flex items-center justify-center shadow-md transition-all cursor-pointer"
+                    >
+                      <MoreVertical className="w-4 h-4" />
+                    </button>
+
+                    {openMenuTripId === trip.id && (
+                      <div className="absolute right-0 mt-2 w-52 bg-white rounded-2xl shadow-xl border border-slate-100 py-1.5 z-30 text-xs animate-fadeIn">
+                        <Link
+                          href={`/trips/${trip.id}/settings`}
+                          className="w-full text-left px-3.5 py-2 flex items-center gap-2 hover:bg-indigo-50 text-indigo-700 font-bold"
+                        >
+                          <Sliders className="w-3.5 h-3.5 text-indigo-600" />
+                          <span>Cài đặt & Xóa chuyến đi</span>
+                        </Link>
+                        <button
+                          onClick={() => {
+                            setOpenMenuTripId(null);
+                            setShowInviteFriendsModal(true);
+                          }}
+                          className="w-full text-left px-3.5 py-2 flex items-center gap-2 hover:bg-purple-50 text-purple-700 font-medium cursor-pointer"
+                        >
+                          <User className="w-3.5 h-3.5 text-purple-600" />
+                          <span>Mời bạn bè vào chuyến</span>
+                        </button>
+                        <button
+                          onClick={() => {
+                            setOpenMenuTripId(null);
+                            openEditCoverModal(trip.id);
+                          }}
+                          className="w-full text-left px-3.5 py-2 flex items-center gap-2 hover:bg-slate-50 text-slate-700 font-medium cursor-pointer"
+                        >
+                          <ImageIcon className="w-3.5 h-3.5 text-slate-400" />
+                          <span>Đổi ảnh bìa nhanh</span>
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 </div>
 
                 {/* Card Content */}
@@ -697,6 +881,17 @@ export default function TripDashboard({ initialProfile }: TripDashboardProps = {
                         +{trip.extraMembers}
                       </div>
                     )}
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setShowInviteFriendsModal(true);
+                      }}
+                      title="Mời bạn bè vào chuyến đi"
+                      className="w-7 h-7 rounded-full bg-purple-50 hover:bg-purple-100 text-purple-700 text-[10px] font-bold flex items-center justify-center ring-2 ring-white shadow-sm transition-colors cursor-pointer"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                    </button>
                   </div>
 
                   {/* Progress % */}
@@ -716,79 +911,98 @@ export default function TripDashboard({ initialProfile }: TripDashboardProps = {
             </div>
           ))}
 
-          {/* INVITATION CARD (Lời mời mới - Hạ Long) */}
-          {hasInvite && (
-            <div className="bg-white rounded-3xl border border-slate-200/80 shadow-sm p-5 flex flex-col justify-between relative">
+          {/* CREATE TRIP CARD (Chỉ hiện khi ở tab Sắp tới) */}
+          {activeFilterTab === "upcoming" && (
+            <div
+              onClick={() => setShowCreateModal(true)}
+              className="rounded-3xl border-2 border-dashed border-slate-200 hover:border-indigo-400 bg-white/60 hover:bg-white p-8 flex flex-col items-center justify-center text-center transition-all cursor-pointer min-h-[300px] group shadow-sm"
+            >
+              <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-[#6366f1] via-[#8b5cf6] to-[#ec4899] text-white flex items-center justify-center shadow-lg shadow-indigo-500/25 group-hover:scale-110 transition-transform duration-300">
+                <Plus className="w-7 h-7" />
+              </div>
+
+              <h3 className="text-base font-bold text-slate-900 mt-4">
+                Lên kế hoạch cho chuyến đi mới
+              </h3>
+              <p className="text-xs text-slate-500 mt-1.5 max-w-xs leading-relaxed">
+                Tạo lịch trình nhóm thông minh, phân chia chi phí minh bạch và bình chọn điểm check-in hấp dẫn.
+              </p>
+
+              <span className="inline-flex items-center gap-1 text-xs font-bold text-indigo-600 mt-4 group-hover:translate-x-1 transition-transform">
+                <span>Bắt đầu ngay hôm nay</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </span>
+            </div>
+          )}
+
+          {/* VỊ TRÍ 1: DANH SÁCH LỜI MỜI THAM GIA ĐANG CHỜ DUYỆT (TAB LỜI MỜI THAM GIA) */}
+          {activeFilterTab === "invites" && hasInvite && (
+            <div
+              onClick={() => setShowInviteModal(true)}
+              className="bg-white rounded-3xl border-2 border-dashed border-purple-300 hover:border-purple-500 shadow-sm hover:shadow-md p-5 flex flex-col justify-between relative transition-all cursor-pointer group"
+            >
               <div>
                 {/* Header Tag */}
                 <div className="flex items-center justify-between">
                   <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-rose-50 text-rose-600 border border-rose-100">
                     <span className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-pulse" />
-                    Lời mời mới
+                    Lời mời đang chờ duyệt
                   </span>
                   <span className="text-[11px] text-slate-400">2 giờ trước</span>
                 </div>
 
                 {/* Invite Title */}
-                <h3 className="text-base font-bold text-slate-900 mt-3 leading-snug">
-                  Hạ Long Bay Cruise & Kayaking 2N1Đ
+                <h3 className="text-base font-bold text-slate-900 mt-3 leading-snug group-hover:text-indigo-600 transition-colors">
+                  Oanh tạc Đà Lạt 3N2Đ 🌲
                 </h3>
 
                 {/* Sender Info */}
-                <div className="mt-3 p-3 rounded-2xl bg-slate-50 border border-slate-100 flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-full bg-indigo-600 text-white text-xs font-bold flex items-center justify-center shrink-0 shadow-sm">
-                    MA
-                  </div>
-                  <p className="text-xs text-slate-600 leading-tight">
-                    <span className="font-bold text-slate-900">Minh Anh</span> vừa gửi lời mời bạn cùng tham gia chuyến đi này.
+                <div className="mt-3 p-3 rounded-2xl bg-purple-50/50 border border-purple-100 flex items-center gap-3">
+                  <img
+                    src="https://images.unsplash.com/photo-1494790108377-be9c29b29330?q=80&w=120&auto=format&fit=crop"
+                    alt="Minh Anh"
+                    className="w-9 h-9 rounded-full object-cover ring-2 ring-purple-200 shrink-0"
+                  />
+                  <p className="text-xs text-slate-700 leading-tight">
+                    <strong className="text-slate-900">Minh Anh</strong> rủ bạn tham gia chuyến đi
                   </p>
                 </div>
 
                 {/* Date & Location */}
                 <div className="mt-3.5 space-y-1.5 text-xs text-slate-500 font-medium">
                   <div className="flex items-center gap-1.5">
-                    <Calendar className="w-3.5 h-3.5 text-slate-400" />
-                    <span>28/11/2026 - 29/11/2026</span>
+                    <Calendar className="w-3.5 h-3.5 text-purple-500" />
+                    <span>15/10/2026 — 18/10/2026</span>
                   </div>
                   <div className="flex items-center gap-1.5">
-                    <MapPin className="w-3.5 h-3.5 text-slate-400" />
-                    <span>Vịnh Hạ Long, Quảng Ninh</span>
+                    <MapPin className="w-3.5 h-3.5 text-rose-500" />
+                    <span>Đồi Đa Phú & Hồ Tuyền Lâm, Đà Lạt</span>
                   </div>
+                </div>
+
+                <div className="mt-3 pt-2 text-[11px] text-indigo-600 font-semibold flex items-center gap-1">
+                  <span>Nhấp vào thẻ để xem chi tiết thiệp mời</span>
+                  <span>→</span>
                 </div>
               </div>
 
-              {/* Action Buttons: Chấp nhận & Từ chối */}
-              <div className="flex items-center gap-2 pt-5 mt-4 border-t border-slate-100">
+              {/* Action Buttons: Chấp nhận (Màu tím) & Từ chối (Màu xám) */}
+              <div
+                className="flex items-center gap-2 pt-4 mt-3 border-t border-slate-100"
+                onClick={(e) => e.stopPropagation()}
+              >
                 <button
-                  onClick={() => {
-                    // Accept invitation
-                    const acceptedTrip: TripItem = {
-                      id: "trip-3",
-                      title: "Hạ Long Bay Cruise & Kayaking 2N1Đ",
-                      role: "Thành viên",
-                      badgeDays: "Còn 30 ngày nữa",
-                      coverImage: "https://images.unsplash.com/photo-1528127269322-539801943592?q=80&w=800&auto=format&fit=crop",
-                      startDate: "28/11/2026",
-                      endDate: "29/11/2026",
-                      location: "Vịnh Hạ Long, Quảng Ninh",
-                      members: [
-                        { initials: "MA", bg: "bg-purple-600" },
-                        { initials: "HN", bg: "bg-indigo-600" },
-                      ],
-                      extraMembers: 1,
-                      progress: 30,
-                    };
-                    setTrips([...trips, acceptedTrip]);
-                    setHasInvite(false);
-                  }}
-                  className="flex-1 py-2.5 rounded-xl bg-[#4338ca] hover:bg-[#3730a3] text-white text-xs font-bold transition-all shadow-sm flex items-center justify-center gap-1.5 cursor-pointer"
+                  type="button"
+                  onClick={handleAcceptInvite}
+                  className="flex-1 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold transition-all shadow-sm shadow-purple-600/20 flex items-center justify-center gap-1.5 cursor-pointer"
                 >
                   <Check className="w-4 h-4" />
                   <span>Chấp nhận</span>
                 </button>
                 <button
-                  onClick={() => setHasInvite(false)}
-                  className="py-2.5 px-4 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-600 text-xs font-semibold transition-all cursor-pointer"
+                  type="button"
+                  onClick={handleDeclineInvite}
+                  className="py-2.5 px-4 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold transition-all cursor-pointer"
                 >
                   Từ chối
                 </button>
@@ -796,27 +1010,34 @@ export default function TripDashboard({ initialProfile }: TripDashboardProps = {
             </div>
           )}
 
-          {/* CREATE TRIP CARD (Lên kế hoạch cho chuyến đi mới) */}
-          <div
-            onClick={() => setShowCreateModal(true)}
-            className="rounded-3xl border-2 border-dashed border-slate-200 hover:border-indigo-400 bg-white/60 hover:bg-white p-8 flex flex-col items-center justify-center text-center transition-all cursor-pointer min-h-[300px] group shadow-sm"
-          >
-            <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-[#6366f1] via-[#8b5cf6] to-[#ec4899] text-white flex items-center justify-center shadow-lg shadow-indigo-500/25 group-hover:scale-110 transition-transform duration-300">
-              <Plus className="w-7 h-7" />
+          {activeFilterTab === "invites" && !hasInvite && (
+            <div className="col-span-full py-16 flex flex-col items-center justify-center text-center p-8 bg-white rounded-3xl border border-slate-200/80 shadow-sm">
+              <div className="w-14 h-14 rounded-2xl bg-purple-50 text-purple-600 flex items-center justify-center mb-3">
+                <Sparkles className="w-7 h-7" />
+              </div>
+              <h3 className="text-base font-bold text-slate-800">
+                Không có lời mời nào đang chờ duyệt
+              </h3>
+              <p className="text-xs text-slate-500 mt-1 max-w-sm">
+                Khi bạn bè rủ bạn tham gia chuyến đi, lời mời sẽ hiển thị tại đây kèm thiệp mời chi tiết.
+              </p>
             </div>
+          )}
 
-            <h3 className="text-base font-bold text-slate-900 mt-4">
-              Lên kế hoạch cho chuyến đi mới
-            </h3>
-            <p className="text-xs text-slate-500 mt-1.5 max-w-xs leading-relaxed">
-              Tạo lịch trình nhóm thông minh, phân chia chi phí minh bạch và bình chọn điểm check-in hấp dẫn.
-            </p>
-
-            <span className="inline-flex items-center gap-1 text-xs font-bold text-indigo-600 mt-4 group-hover:translate-x-1 transition-transform">
-              <span>Bắt đầu ngay hôm nay</span>
-              <ArrowRight className="w-3.5 h-3.5" />
-            </span>
-          </div>
+          {/* TAB ĐÃ ĐI */}
+          {activeFilterTab === "completed" && (
+            <div className="col-span-full py-16 flex flex-col items-center justify-center text-center p-8 bg-white rounded-3xl border border-slate-200/80 shadow-sm">
+              <div className="w-14 h-14 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center mb-3">
+                <CheckCircle2 className="w-7 h-7" />
+              </div>
+              <h3 className="text-base font-bold text-slate-800">
+                Chưa có chuyến đi nào hoàn thành
+              </h3>
+              <p className="text-xs text-slate-500 mt-1 max-w-sm">
+                Những chuyến đi bạn đã hoàn thành sẽ được lưu giữ tại đây để bạn cùng bạn bè ôn lại kỷ niệm.
+              </p>
+            </div>
+          )}
         </div>
 
         {/* 5. VOTING SURVEY BANNER AT BOTTOM */}
@@ -953,115 +1174,12 @@ export default function TripDashboard({ initialProfile }: TripDashboardProps = {
         </div>
       )}
 
-      {/* 7. MODAL TẠO CHUYẾN ĐI MỚI */}
-      {showCreateModal && (
-        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl p-6 w-full max-w-lg shadow-2xl border border-slate-100 animate-fadeIn">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-              <h3 className="text-base font-bold text-slate-900">
-                Tạo chuyến đi du lịch mới
-              </h3>
-              <button
-                onClick={() => setShowCreateModal(false)}
-                className="p-1 rounded-full text-slate-400 hover:text-slate-600"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <form onSubmit={handleCreateTripSubmit} className="mt-4 space-y-4 text-xs">
-              <div>
-                <label className="block font-bold text-slate-800 mb-1">
-                  Tên chuyến đi
-                </label>
-                <input
-                  type="text"
-                  required
-                  placeholder="Ví dụ: Trekking Tà Năng Phan Dũng"
-                  value={newTripTitle}
-                  onChange={(e) => setNewTripTitle(e.target.value)}
-                  className="w-full rounded-xl px-3.5 py-2.5 bg-slate-50 border border-slate-200 outline-none focus:border-indigo-500"
-                />
-              </div>
-
-              <div>
-                <label className="block font-bold text-slate-800 mb-1">
-                  Điểm đến
-                </label>
-                <input
-                  type="text"
-                  placeholder="Ví dụ: Lâm Đồng - Bình Thuận"
-                  value={newTripLocation}
-                  onChange={(e) => setNewTripLocation(e.target.value)}
-                  className="w-full rounded-xl px-3.5 py-2.5 bg-slate-50 border border-slate-200 outline-none focus:border-indigo-500"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-bold text-slate-800 mb-1">
-                    Ngày bắt đầu
-                  </label>
-                  <input
-                    type="text"
-                    value={newTripStartDate}
-                    onChange={(e) => setNewTripStartDate(e.target.value)}
-                    className="w-full rounded-xl px-3.5 py-2.5 bg-slate-50 border border-slate-200 outline-none focus:border-indigo-500"
-                  />
-                </div>
-                <div>
-                  <label className="block font-bold text-slate-800 mb-1">
-                    Ngày kết thúc
-                  </label>
-                  <input
-                    type="text"
-                    value={newTripEndDate}
-                    onChange={(e) => setNewTripEndDate(e.target.value)}
-                    className="w-full rounded-xl px-3.5 py-2.5 bg-slate-50 border border-slate-200 outline-none focus:border-indigo-500"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block font-bold text-slate-800 mb-1">
-                  Chọn ảnh bìa mẫu
-                </label>
-                <div className="grid grid-cols-3 gap-2">
-                  {presetPhotos.slice(0, 3).map((p, i) => (
-                    <div
-                      key={i}
-                      onClick={() => setNewTripCover(p.url)}
-                      className={`h-16 rounded-xl overflow-hidden cursor-pointer border-2 transition-all ${
-                        newTripCover === p.url
-                          ? "border-indigo-600 ring-2 ring-indigo-200"
-                          : "border-transparent"
-                      }`}
-                    >
-                      <img src={p.url} alt={p.name} className="w-full h-full object-cover" />
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
-                <button
-                  type="button"
-                  onClick={() => setShowCreateModal(false)}
-                  className="px-4 py-2.5 rounded-xl border border-slate-200 text-slate-600 font-semibold"
-                >
-                  Hủy
-                </button>
-                <button
-                  type="submit"
-                  className="px-5 py-2.5 rounded-xl bg-indigo-600 text-white font-bold hover:bg-indigo-700 shadow-md shadow-indigo-600/20"
-                >
-                  Tạo chuyến đi
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+      {/* 7. MODAL TẠO CHUYẾN ĐI MỚI (CHÍNH THỨC THEO MOCKUP TRIPPO MỚI 100%) */}
+      <CreateTripModal
+        isOpen={showCreateModal}
+        onClose={() => setShowCreateModal(false)}
+        onTripCreated={handleTripCreated}
+      />
 
       {/* 8. MODAL BÌNH CHỌN KHẢO SÁT */}
       {showVoteModal && (
@@ -1338,6 +1456,20 @@ export default function TripDashboard({ initialProfile }: TripDashboardProps = {
           </div>
         </div>
       )}
+
+      {/* 9. MODAL LỜI MỜI DU LỊCH ĐẶC BIỆT (THEO MOCKUP 100%) */}
+      <TripInviteModal
+        isOpen={showInviteModal}
+        onClose={() => setShowInviteModal(false)}
+        onAccept={handleAcceptInvite}
+        onDecline={handleDeclineInvite}
+      />
+
+      {/* 10. MODAL MỜI BẠN BÈ VÀO CHUYẾN ĐI (THEO MOCKUP 100%) */}
+      <InviteFriendsModal
+        isOpen={showInviteFriendsModal}
+        onClose={() => setShowInviteFriendsModal(false)}
+      />
 
       {/* FOOTER */}
       <footer className="max-w-7xl mx-auto px-4 sm:px-6 pt-16 mt-12 border-t border-slate-200/80 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-500">
