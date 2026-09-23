@@ -1,412 +1,304 @@
 "use client";
 
 import React, { useState } from "react";
+import { useRouter } from "next/navigation";
 import {
+  Compass,
+  Plane,
   Mail,
   Lock,
   Eye,
   EyeOff,
   User,
-  Globe,
-  Sun,
-  Moon,
-  Check,
-  ChevronDown,
+  ArrowRight,
   ArrowLeft,
   CheckCircle2,
   AlertCircle,
+  HelpCircle,
 } from "lucide-react";
 
 type AuthTab = "login" | "register" | "forgot";
-type Language = "vi" | "en";
 
 export default function AuthCard() {
-  const [activeTab, setActiveTab] = useState<AuthTab>("login");
-  const [language, setLanguage] = useState<Language>("vi");
-  const [darkMode, setDarkMode] = useState<boolean>(false);
-  const [showLangMenu, setShowLangMenu] = useState<boolean>(false);
+  const router = useRouter();
 
-  // Form states
+  // Tab state
+  const [activeTab, setActiveTab] = useState<AuthTab>("login");
+
+  // Form input states
   const [showPassword, setShowPassword] = useState<boolean>(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState<boolean>(false);
-  const [rememberMe, setRememberMe] = useState<boolean>(false);
+  const [rememberMe, setRememberMe] = useState<boolean>(true);
   const [agreeTerms, setAgreeTerms] = useState<boolean>(false);
 
-  // Input states
   const [loginEmail, setLoginEmail] = useState<string>("");
   const [loginPassword, setLoginPassword] = useState<string>("");
+
   const [registerName, setRegisterName] = useState<string>("");
   const [registerEmail, setRegisterEmail] = useState<string>("");
   const [registerPassword, setRegisterPassword] = useState<string>("");
   const [registerConfirmPassword, setRegisterConfirmPassword] = useState<string>("");
+
   const [forgotEmail, setForgotEmail] = useState<string>("");
 
-  // Toast / Status message
+  // Loading & Message
+  const [isLoading, setIsLoading] = useState<boolean>(false);
   const [statusMessage, setStatusMessage] = useState<{
     type: "success" | "error";
     text: string;
   } | null>(null);
 
-  const t = {
-    vi: {
-      brandTag: "Quản lý du lịch nhóm",
-      brandSlogan: "Khám phá thế giới cùng hội bạn thân",
-      brandHeaderSub: "Shared journeys made effortless",
-      tabLogin: "Đăng nhập",
-      tabRegister: "Đăng ký",
-      emailLabel: "Email",
-      emailPlaceholder: "vidu@gmail.com",
-      passwordLabel: "Mật khẩu",
-      passwordPlaceholder: "••••••••",
-      confirmPasswordLabel: "Xác nhận mật khẩu",
-      nameLabel: "Họ và tên",
-      namePlaceholder: "Nguyễn Văn A",
-      rememberMe: "Ghi nhớ đăng nhập",
-      forgotPassword: "Quên mật khẩu?",
-      btnLogin: "Đăng nhập",
-      btnRegister: "Đăng ký tài khoản",
-      orContinueWith: "HOẶC TIẾP TỤC VỚI",
-      googleLogin: "Đăng nhập với Google",
-      googleRegister: "Đăng ký với Google",
-      noAccount: "Chưa có tài khoản?",
-      hasAccount: "Đã có tài khoản?",
-      registerNow: "Đăng ký ngay",
-      loginNow: "Đăng nhập ngay",
-      agreeTerms: "Tôi đồng ý với Điều khoản sử dụng & Chính sách bảo mật",
-      forgotTitle: "Khôi phục mật khẩu",
-      forgotDesc: "Nhập email đã đăng ký của bạn để nhận liên kết đặt lại mật khẩu.",
-      btnReset: "Gửi liên kết khôi phục",
-      backToLogin: "Quay lại đăng nhập",
-      copyright: "© 2025 TripTogether Inc. Crafted for collaborative wanderlust.",
-      privacy: "Chính sách",
-      terms: "Điều khoản",
-      support: "Hỗ trợ",
-      msgLoginSuccess: "Đăng nhập thành công!",
-      msgRegisterSuccess: "Tạo tài khoản thành công! Chào mừng bạn.",
-      msgForgotSuccess: "Đã gửi email khôi phục mật khẩu. Vui lòng kiểm tra hộp thư!",
-      msgFillAll: "Vui lòng điền đầy đủ các thông tin cần thiết.",
-      msgPassMismatch: "Mật khẩu xác nhận không khớp!",
-      msgAgreeRequired: "Vui lòng đồng ý với điều khoản sử dụng!",
-    },
-    en: {
-      brandTag: "Group travel manager",
-      brandSlogan: "Explore the world with your best friends",
-      brandHeaderSub: "Shared journeys made effortless",
-      tabLogin: "Sign in",
-      tabRegister: "Sign up",
-      emailLabel: "Email",
-      emailPlaceholder: "example@gmail.com",
-      passwordLabel: "Password",
-      passwordPlaceholder: "••••••••",
-      confirmPasswordLabel: "Confirm Password",
-      nameLabel: "Full Name",
-      namePlaceholder: "John Doe",
-      rememberMe: "Remember me",
-      forgotPassword: "Forgot password?",
-      btnLogin: "Sign in",
-      btnRegister: "Create Account",
-      orContinueWith: "OR CONTINUE WITH",
-      googleLogin: "Sign in with Google",
-      googleRegister: "Sign up with Google",
-      noAccount: "Don't have an account?",
-      hasAccount: "Already have an account?",
-      registerNow: "Sign up now",
-      loginNow: "Sign in now",
-      agreeTerms: "I agree to the Terms of Service & Privacy Policy",
-      forgotTitle: "Reset password",
-      forgotDesc: "Enter your registered email address to receive password reset link.",
-      btnReset: "Send reset link",
-      backToLogin: "Back to sign in",
-      copyright: "© 2025 TripTogether Inc. Crafted for collaborative wanderlust.",
-      privacy: "Privacy",
-      terms: "Terms",
-      support: "Support",
-      msgLoginSuccess: "Signed in successfully!",
-      msgRegisterSuccess: "Account created successfully! Welcome aboard.",
-      msgForgotSuccess: "Password reset link sent! Check your inbox.",
-      msgFillAll: "Please fill in all required fields.",
-      msgPassMismatch: "Passwords do not match!",
-      msgAgreeRequired: "Please accept the terms of service to proceed!",
-    },
-  }[language];
-
-  const handleLoginSubmit = (e: React.FormEvent) => {
+  // Handle Login Submit
+  const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!loginEmail || !loginPassword) {
-      setStatusMessage({ type: "error", text: t.msgFillAll });
+      setStatusMessage({ type: "error", text: "Vui lòng nhập đầy đủ email và mật khẩu!" });
       return;
     }
-    setStatusMessage({ type: "success", text: t.msgLoginSuccess });
-    setTimeout(() => setStatusMessage(null), 4000);
+    setIsLoading(true);
+    setStatusMessage(null);
+    try {
+      const res = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: loginEmail, password: loginPassword }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || "Email hoặc mật khẩu không chính xác");
+      }
+      setStatusMessage({ type: "success", text: "Đăng nhập thành công! Đang chuyển hướng..." });
+      setTimeout(() => {
+        router.push("/dashboard");
+        router.refresh();
+      }, 1000);
+    } catch (err: any) {
+      setStatusMessage({ type: "error", text: err.message || "Đăng nhập thất bại" });
+    } finally {
+      setIsLoading(false);
+    }
   };
 
-  const handleRegisterSubmit = (e: React.FormEvent) => {
+  // Handle Register Submit
+  const handleRegisterSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!registerName || !registerEmail || !registerPassword || !registerConfirmPassword) {
-      setStatusMessage({ type: "error", text: t.msgFillAll });
+      setStatusMessage({ type: "error", text: "Vui lòng điền đầy đủ các thông tin cần thiết!" });
       return;
     }
     if (registerPassword !== registerConfirmPassword) {
-      setStatusMessage({ type: "error", text: t.msgPassMismatch });
+      setStatusMessage({ type: "error", text: "Mật khẩu xác nhận không khớp!" });
+      return;
+    }
+    if (registerPassword.length < 6) {
+      setStatusMessage({ type: "error", text: "Mật khẩu phải có tối thiểu 6 ký tự!" });
       return;
     }
     if (!agreeTerms) {
-      setStatusMessage({ type: "error", text: t.msgAgreeRequired });
+      setStatusMessage({ type: "error", text: "Vui lòng đồng ý với điều khoản sử dụng!" });
       return;
     }
-    setStatusMessage({ type: "success", text: t.msgRegisterSuccess });
-    setTimeout(() => {
-      setStatusMessage(null);
-      setActiveTab("login");
-    }, 2000);
+    setIsLoading(true);
+    setStatusMessage(null);
+    try {
+      const res = await fetch("/api/auth/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: registerEmail,
+          password: registerPassword,
+          full_name: registerName,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || "Đăng ký không thành công");
+      }
+      setStatusMessage({ type: "success", text: "Tạo tài khoản thành công! Đang chuyển hướng..." });
+      setTimeout(() => {
+        router.push("/dashboard");
+        router.refresh();
+      }, 1200);
+    } catch (err: any) {
+      setStatusMessage({ type: "error", text: err.message || "Đăng ký thất bại" });
+    } finally {
+      setIsLoading(false);
+    }
   };
 
-  const handleForgotSubmit = (e: React.FormEvent) => {
+  // Handle Forgot Password Submit
+  const handleForgotSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!forgotEmail) {
-      setStatusMessage({ type: "error", text: t.msgFillAll });
+      setStatusMessage({ type: "error", text: "Vui lòng nhập email khôi phục!" });
       return;
     }
-    setStatusMessage({ type: "success", text: t.msgForgotSuccess });
-    setTimeout(() => {
-      setStatusMessage(null);
-      setActiveTab("login");
-    }, 3000);
+    setIsLoading(true);
+    setStatusMessage(null);
+    try {
+      const res = await fetch("/api/auth/forgot-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: forgotEmail }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || "Không thể gửi email khôi phục");
+      }
+      setStatusMessage({ type: "success", text: "Đã gửi liên kết khôi phục vào hộp thư của bạn!" });
+      setTimeout(() => {
+        setActiveTab("login");
+      }, 3000);
+    } catch (err: any) {
+      setStatusMessage({ type: "error", text: err.message || "Gửi yêu cầu thất bại" });
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
-    <div
-      className={`min-h-screen w-full flex flex-col justify-between transition-colors duration-300 relative overflow-x-hidden ${
-        darkMode
-          ? "bg-[#0b1319] text-slate-100"
-          : "bg-gradient-to-b from-[#f3f7fb] via-[#eef5fa] to-[#f6f9fc] text-slate-800"
-      }`}
-    >
-      {/* Background Decorative Rings / Compass Pattern */}
-      <div className="absolute inset-0 pointer-events-none flex items-center justify-center overflow-hidden">
-        <div
-          className={`w-[480px] h-[480px] rounded-full border transition-all duration-700 ${
-            darkMode ? "border-teal-500/10" : "border-sky-300/35"
-          }`}
+    <div className="min-h-screen w-full flex flex-col lg:flex-row bg-white text-slate-800 font-sans selection:bg-indigo-500 selection:text-white">
+      {/* =========================================
+          LEFT PANE: HERO SCENERY & BRAND STORY (50%)
+          ========================================= */}
+      <div className="relative w-full lg:w-1/2 min-h-[480px] lg:min-h-screen overflow-hidden flex flex-col justify-between p-7 sm:p-10 lg:p-14 text-white">
+        {/* Snowy Mountain & Mist Background Image */}
+        <img
+          src="/images/auth/hero-bg.png"
+          alt="WeTravel Purple Snowy Mountain"
+          className="absolute inset-0 w-full h-full object-cover object-center"
         />
-        <div
-          className={`w-[720px] h-[720px] rounded-full border transition-all duration-700 ${
-            darkMode ? "border-teal-500/5" : "border-sky-200/30"
-          }`}
-        />
-        <div
-          className={`w-[980px] h-[980px] rounded-full border transition-all duration-700 ${
-            darkMode ? "border-teal-500/5" : "border-sky-100/30"
-          }`}
-        />
-        <div
-          className={`w-[1240px] h-[1240px] rounded-full border transition-all duration-700 ${
-            darkMode ? "border-teal-500/5" : "border-slate-200/20"
-          }`}
-        />
+
+        {/* Soft Purple/Pink Gradient Overlay */}
+        <div className="absolute inset-0 bg-gradient-to-t from-[#1e0e33]/90 via-[#2f1b4d]/40 to-[#100720]/30" />
+
+        {/* Top Badges Bar */}
+        <div className="relative z-10 flex items-center justify-between gap-3">
+          {/* Brand Pill Left */}
+          <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-white/20 backdrop-blur-md border border-white/25 text-white text-xs font-bold tracking-wide shadow-sm">
+            <Compass className="w-3.5 h-3.5 text-white" />
+            <span>WETRAVEL</span>
+          </div>
+
+          {/* Hot Destinations Pill Right */}
+          <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-white/20 backdrop-blur-md border border-white/25 text-white text-xs font-medium shadow-sm">
+            <span className="w-2 h-2 rounded-full bg-pink-300 animate-pulse" />
+            <span>45+ Điểm đến đang hot</span>
+          </div>
+        </div>
+
+        {/* Middle/Bottom Main Typography & Story */}
+        <div className="relative z-10 my-auto py-10 lg:py-0">
+          <div className="inline-flex items-center gap-1.5 text-xs font-semibold text-purple-200 tracking-wide mb-3">
+            <Plane className="w-3.5 h-3.5 text-pink-300 transform -rotate-45" />
+            <span>Hành trình không lo âu</span>
+          </div>
+
+          <h1 className="text-3xl sm:text-4xl lg:text-5xl font-extrabold text-white leading-tight tracking-tight drop-shadow-md">
+            Cùng bạn bè tạo nên<br />
+            những chuyến đi đáng<br />
+            nhớ.
+          </h1>
+
+          <p className="text-xs sm:text-sm text-purple-100/90 mt-4 leading-relaxed max-w-lg font-normal">
+            Lên lịch trình thông minh theo thời gian thực, chia sẻ chi phí minh bạch và khám phá thế giới cùng hội cạ cứng của bạn.
+          </p>
+
+          {/* Social Proof Glass Card */}
+          <div className="mt-8 p-3.5 sm:p-4 rounded-2xl bg-black/40 backdrop-blur-md border border-white/20 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-2xl max-w-lg">
+            {/* Left: Avatar Stack with badges */}
+            <div className="flex items-center gap-3">
+              <div className="flex items-center -space-x-2 shrink-0">
+                <img
+                  src="/images/auth/badge-1.jpg"
+                  alt="Adventure Awaits"
+                  className="w-9 h-9 rounded-full object-cover ring-2 ring-white/80 shadow-md"
+                />
+                <img
+                  src="/images/auth/badge-2.jpg"
+                  alt="Tropical Escape"
+                  className="w-9 h-9 rounded-full object-cover ring-2 ring-white/80 shadow-md"
+                />
+                <img
+                  src="/images/auth/badge-3.jpg"
+                  alt="Mountain Mist"
+                  className="w-9 h-9 rounded-full object-cover ring-2 ring-white/80 shadow-md"
+                />
+                <div className="w-9 h-9 rounded-full bg-indigo-600 text-white text-[11px] font-extrabold flex items-center justify-center ring-2 ring-white/80 shadow-md">
+                  +1k
+                </div>
+              </div>
+
+              <div>
+                <p className="text-xs font-bold text-white leading-tight">
+                  Hơn 1,000+ nhóm bạn
+                </p>
+                <p className="text-[11px] text-purple-200/80 leading-tight mt-0.5">
+                  Đồng hành qua 45 quốc gia
+                </p>
+              </div>
+            </div>
+
+            {/* Right: Star Ratings */}
+            <div className="text-left sm:text-right shrink-0">
+              <div className="flex items-center sm:justify-end gap-1 text-amber-400 text-xs">
+                <span>★</span>
+                <span>★</span>
+                <span>★</span>
+                <span>★</span>
+                <span>★</span>
+              </div>
+              <p className="text-xs font-bold text-white mt-0.5">
+                4.9 / 5.0 (2.4k đánh giá)
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* Left Bottom Space */}
+        <div className="relative z-10 text-[11px] text-purple-200/60 hidden lg:block">
+          © 2025 WeTravel. Nền tảng du lịch nhóm thông minh.
+        </div>
       </div>
 
-      {/* Top Navbar */}
-      <header className="relative z-20 w-full max-w-7xl mx-auto px-6 py-5 flex items-center justify-between">
-        {/* Logo Left */}
-        <div className="flex items-center gap-3 select-none">
-          <div className="w-10 h-10 rounded-xl bg-[#004d53] flex items-center justify-center text-white shadow-sm shadow-teal-950/20">
-            {/* Plane Silhouette */}
-            <svg
-              className="w-5 h-5 fill-current transform rotate-[15deg]"
-              viewBox="0 0 24 24"
-            >
-              <path d="M21 16v-2l-8-5V3.5c0-.83-.67-1.5-1.5-1.5S10 2.67 10 3.5V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5l8 2.5z" />
-            </svg>
-          </div>
-          <div>
-            <span
-              className={`text-lg font-bold tracking-tight block leading-tight ${
-                darkMode ? "text-white" : "text-slate-900"
-              }`}
-            >
-              TripTogether
-            </span>
-            <span
-              className={`text-[11px] block leading-tight ${
-                darkMode ? "text-slate-400" : "text-slate-500"
-              }`}
-            >
-              {t.brandHeaderSub}
-            </span>
-          </div>
-        </div>
-
-        {/* Right Controls: Language & Dark mode */}
-        <div className="flex items-center gap-2.5">
-          {/* Language Menu */}
-          <div className="relative">
-            <button
-              onClick={() => setShowLangMenu(!showLangMenu)}
-              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-full border transition-all shadow-sm ${
-                darkMode
-                  ? "bg-slate-800/80 border-slate-700 text-slate-200 hover:bg-slate-700"
-                  : "bg-white/90 border-slate-200 text-slate-700 hover:bg-white"
-              }`}
-            >
-              <Globe className="w-3.5 h-3.5 text-slate-500" />
-              <span>{language.toUpperCase()}</span>
-              <ChevronDown className="w-3 h-3 text-slate-400" />
-            </button>
-
-            {showLangMenu && (
-              <div
-                className={`absolute right-0 mt-1.5 w-32 rounded-xl py-1 shadow-lg border text-xs z-30 ${
-                  darkMode
-                    ? "bg-slate-800 border-slate-700 text-slate-200"
-                    : "bg-white border-slate-100 text-slate-700"
-                }`}
-              >
-                <button
-                  onClick={() => {
-                    setLanguage("vi");
-                    setShowLangMenu(false);
-                  }}
-                  className="w-full text-left px-3 py-2 flex items-center justify-between hover:bg-teal-500/10"
-                >
-                  <span>Tiếng Việt (VI)</span>
-                  {language === "vi" && <Check className="w-3.5 h-3.5 text-teal-600" />}
-                </button>
-                <button
-                  onClick={() => {
-                    setLanguage("en");
-                    setShowLangMenu(false);
-                  }}
-                  className="w-full text-left px-3 py-2 flex items-center justify-between hover:bg-teal-500/10"
-                >
-                  <span>English (EN)</span>
-                  {language === "en" && <Check className="w-3.5 h-3.5 text-teal-600" />}
-                </button>
+      {/* =========================================
+          RIGHT PANE: AUTHENTICATION FORMS (50%)
+          ========================================= */}
+      <div className="w-full lg:w-1/2 min-h-screen bg-gradient-to-b from-[#fbfcfe] via-[#f7f9fd] to-[#f4f7fc] flex flex-col justify-between p-6 sm:p-12 lg:p-16">
+        <div className="w-full max-w-[420px] mx-auto my-auto py-6">
+          {/* Top Logo & Slogan */}
+          <div className="text-center mb-6">
+            <div className="inline-flex items-center justify-center mb-2">
+              {/* Colorful Trippo Brand Icon */}
+              <div className="w-11 h-11 rounded-2xl bg-gradient-to-tr from-indigo-500 via-purple-500 to-pink-500 p-[2px] shadow-md shadow-indigo-500/20">
+                <div className="w-full h-full bg-white rounded-[14px] flex items-center justify-center">
+                  <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-600 to-pink-600 font-extrabold text-xs tracking-tight">
+                    Trippo
+                  </span>
+                </div>
               </div>
-            )}
-          </div>
-
-          {/* Dark / Light Toggle */}
-          <button
-            onClick={() => setDarkMode(!darkMode)}
-            title={darkMode ? "Chế độ sáng" : "Chế độ tối"}
-            className={`p-2 rounded-full border transition-all shadow-sm ${
-              darkMode
-                ? "bg-slate-800/80 border-slate-700 text-amber-300 hover:bg-slate-700"
-                : "bg-white/90 border-slate-200 text-slate-600 hover:bg-white"
-            }`}
-          >
-            {darkMode ? <Sun className="w-4 h-4" /> : <Sun className="w-4 h-4" />}
-          </button>
-        </div>
-      </header>
-
-      {/* Main Content Area */}
-      <main className="relative z-10 flex-1 flex items-center justify-center px-4 py-8 sm:py-12">
-        <div
-          className={`w-full max-w-[470px] rounded-[28px] p-7 sm:p-9 transition-all duration-300 ${
-            darkMode
-              ? "bg-[#131d24] border border-slate-800 shadow-[0_25px_60px_-15px_rgba(0,0,0,0.6)]"
-              : "bg-white border border-slate-100 shadow-[0_20px_60px_-15px_rgba(15,23,42,0.08)]"
-          }`}
-        >
-          {/* Top Travel Badge */}
-          <div className="flex justify-center mb-4">
-            <div className="w-14 h-14 rounded-2xl bg-[#005159] flex items-center justify-center text-white shadow-md shadow-[#005159]/25">
-              <svg
-                width="26"
-                height="26"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2.2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                {/* Route Path with dashed segments and waypoint dots */}
-                <path
-                  d="M4 17.5c2-3.5 5.5-6 9.5-6 1.8 0 3.5.8 6.5-4.5"
-                  strokeDasharray="2.2 2.2"
-                />
-                <circle cx="4" cy="17.5" r="1.5" fill="currentColor" />
-                <circle cx="13.5" cy="11.5" r="1.5" fill="currentColor" />
-                <path d="M16 7h4v4" />
-                <path d="M20 7l-5 5" />
-              </svg>
             </div>
-          </div>
-
-          {/* Brand Header */}
-          <div className="text-center">
-            <div className="flex items-center justify-center gap-2 flex-wrap">
-              <h1
-                className={`text-2xl font-bold tracking-tight ${
-                  darkMode ? "text-white" : "text-slate-900"
-                }`}
-              >
-                TripTogether
-              </h1>
-              <span
-                className={`text-xs font-semibold px-2.5 py-0.5 rounded-full border ${
-                  darkMode
-                    ? "bg-teal-950/60 text-teal-300 border-teal-800/60"
-                    : "bg-[#e8f3f8] text-[#136b82] border-sky-100"
-                }`}
-              >
-                {t.brandTag}
-              </span>
-            </div>
-            <p
-              className={`text-sm mt-1.5 ${
-                darkMode ? "text-slate-400" : "text-slate-500"
-              }`}
-            >
-              {t.brandSlogan}
+            <p className="text-xs text-slate-500 font-medium">
+              Lập kế hoạch & đồng hành mọi nẻo đường cùng bạn bè
             </p>
           </div>
 
-          {/* Toast / Status banner */}
-          {statusMessage && (
-            <div
-              className={`mt-4 p-3 rounded-xl text-xs flex items-center gap-2 animate-fadeIn ${
-                statusMessage.type === "success"
-                  ? "bg-emerald-50 text-emerald-800 border border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800"
-                  : "bg-rose-50 text-rose-800 border border-rose-200 dark:bg-rose-950/40 dark:text-rose-300 dark:border-rose-800"
-              }`}
-            >
-              {statusMessage.type === "success" ? (
-                <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
-              ) : (
-                <AlertCircle className="w-4 h-4 shrink-0 text-rose-600 dark:text-rose-400" />
-              )}
-              <span>{statusMessage.text}</span>
-            </div>
-          )}
-
-          {/* Segmented Control Tabs (Đăng nhập / Đăng ký) */}
+          {/* Segmented Switcher: Đăng nhập / Đăng ký */}
           {activeTab !== "forgot" && (
-            <div
-              className={`p-1 rounded-2xl flex gap-1 mt-6 select-none ${
-                darkMode ? "bg-slate-800/80" : "bg-[#eff3f7]"
-              }`}
-            >
+            <div className="p-1 rounded-2xl bg-[#ebf0f7] flex max-w-sm mx-auto w-full mb-5 select-none">
               <button
                 type="button"
                 onClick={() => {
                   setActiveTab("login");
                   setStatusMessage(null);
                 }}
-                className={`flex-1 py-2 text-sm font-semibold rounded-xl transition-all duration-200 ${
+                className={`flex-1 py-2 text-xs font-bold rounded-xl transition-all duration-200 ${
                   activeTab === "login"
-                    ? darkMode
-                      ? "bg-slate-700 text-teal-300 shadow-sm"
-                      : "bg-white text-[#00525b] shadow-sm"
-                    : darkMode
-                    ? "text-slate-400 hover:text-slate-200"
-                    : "text-slate-500 hover:text-slate-700"
+                    ? "bg-white text-slate-900 shadow-sm"
+                    : "text-slate-500 hover:text-slate-800"
                 }`}
               >
-                {t.tabLogin}
+                Đăng nhập
               </button>
               <button
                 type="button"
@@ -414,101 +306,133 @@ export default function AuthCard() {
                   setActiveTab("register");
                   setStatusMessage(null);
                 }}
-                className={`flex-1 py-2 text-sm font-semibold rounded-xl transition-all duration-200 ${
+                className={`flex-1 py-2 text-xs font-bold rounded-xl transition-all duration-200 ${
                   activeTab === "register"
-                    ? darkMode
-                      ? "bg-slate-700 text-teal-300 shadow-sm"
-                      : "bg-white text-[#00525b] shadow-sm"
-                    : darkMode
-                    ? "text-slate-400 hover:text-slate-200"
-                    : "text-slate-500 hover:text-slate-700"
+                    ? "bg-white text-slate-900 shadow-sm"
+                    : "text-slate-500 hover:text-slate-800"
                 }`}
               >
-                {t.tabRegister}
+                Đăng ký
               </button>
             </div>
           )}
 
-          {/* TAB 1: ĐĂNG NHẬP (LOGIN FORM) */}
+          {/* Google Button */}
+          {activeTab !== "forgot" && (
+            <button
+              type="button"
+              onClick={() => (window.location.href = "/api/auth/google")}
+              className="w-full py-3 px-4 rounded-2xl bg-white hover:bg-slate-50 border border-slate-200/90 text-sm font-semibold text-slate-700 flex items-center justify-center gap-2.5 shadow-sm transition-all cursor-pointer mb-5 active:scale-[0.99]"
+            >
+              {/* Google 4-color SVG */}
+              <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24">
+                <path
+                  fill="#4285F4"
+                  d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.66-5.17 3.66-9.17z"
+                />
+                <path
+                  fill="#34A853"
+                  d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.1-6.72-4.93H1.25v3.15C3.26 21.36 7.34 24 12 24z"
+                />
+                <path
+                  fill="#FBBC05"
+                  d="M5.28 14.27c-.25-.72-.38-1.49-.38-2.27s.13-1.55.38-2.27V6.58H1.25C.45 8.18 0 10.03 0 12s.45 3.82 1.25 5.42l4.03-3.15z"
+                />
+                <path
+                  fill="#EA4335"
+                  d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.34 0 3.26 2.64 1.25 6.58l4.03 3.15c.95-2.83 3.6-4.98 6.72-4.98z"
+                />
+              </svg>
+              <span>Tiếp tục với Google</span>
+            </button>
+          )}
+
+          {/* Divider */}
+          {activeTab !== "forgot" && (
+            <div className="relative flex items-center justify-center mb-5">
+              <div className="w-full border-t border-slate-200" />
+              <span className="absolute px-3 text-xs text-slate-400 bg-[#f8fafe] font-medium">
+                hoặc tiếp tục với email
+              </span>
+            </div>
+          )}
+
+          {/* Status / Toast Notification */}
+          {statusMessage && (
+            <div
+              className={`mb-4 p-3 rounded-2xl text-xs flex items-center gap-2 animate-fadeIn ${
+                statusMessage.type === "success"
+                  ? "bg-emerald-50 text-emerald-800 border border-emerald-200"
+                  : "bg-rose-50 text-rose-800 border border-rose-200"
+              }`}
+            >
+              {statusMessage.type === "success" ? (
+                <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-600" />
+              ) : (
+                <AlertCircle className="w-4 h-4 shrink-0 text-rose-600" />
+              )}
+              <span>{statusMessage.text}</span>
+            </div>
+          )}
+
+          {/* =========================================
+              TAB 1: ĐĂNG NHẬP (LOGIN FORM)
+              ========================================= */}
           {activeTab === "login" && (
-            <form onSubmit={handleLoginSubmit} className="mt-5 space-y-4">
+            <form onSubmit={handleLoginSubmit} className="space-y-4">
               {/* Email */}
               <div>
-                <label
-                  className={`block text-xs font-semibold mb-1.5 ${
-                    darkMode ? "text-slate-300" : "text-slate-700"
-                  }`}
-                >
-                  {t.emailLabel}
+                <label className="block text-xs font-bold text-slate-800 mb-1.5">
+                  Địa chỉ email
                 </label>
                 <div className="relative">
                   <Mail className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
                   <input
                     type="email"
+                    required
                     value={loginEmail}
                     onChange={(e) => setLoginEmail(e.target.value)}
-                    placeholder={t.emailPlaceholder}
-                    className={`w-full text-sm rounded-xl pl-10 pr-4 py-3 border transition-all outline-none ${
-                      darkMode
-                        ? "bg-slate-800/60 border-slate-700 text-slate-100 placeholder:text-slate-500 focus:border-teal-500 focus:bg-slate-800"
-                        : "bg-[#f8fafc] border-slate-200/90 text-slate-800 placeholder:text-slate-400 focus:border-[#005b66] focus:bg-white focus:ring-2 focus:ring-[#005b66]/15"
-                    }`}
+                    placeholder="ban@vidu.com"
+                    className="w-full bg-[#f1f5f9] border border-transparent focus:border-indigo-500 focus:bg-white rounded-2xl pl-10 pr-4 py-3 text-sm text-slate-800 placeholder:text-slate-400 outline-none transition-all"
                   />
                 </div>
               </div>
 
               {/* Password */}
               <div>
-                <label
-                  className={`block text-xs font-semibold mb-1.5 ${
-                    darkMode ? "text-slate-300" : "text-slate-700"
-                  }`}
-                >
-                  {t.passwordLabel}
+                <label className="block text-xs font-bold text-slate-800 mb-1.5">
+                  Mật khẩu
                 </label>
                 <div className="relative">
                   <Lock className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
                   <input
                     type={showPassword ? "text" : "password"}
+                    required
                     value={loginPassword}
                     onChange={(e) => setLoginPassword(e.target.value)}
-                    placeholder={t.passwordPlaceholder}
-                    className={`w-full text-sm rounded-xl pl-10 pr-10 py-3 border transition-all outline-none ${
-                      darkMode
-                        ? "bg-slate-800/60 border-slate-700 text-slate-100 placeholder:text-slate-500 focus:border-teal-500 focus:bg-slate-800"
-                        : "bg-[#f8fafc] border-slate-200/90 text-slate-800 placeholder:text-slate-400 focus:border-[#005b66] focus:bg-white focus:ring-2 focus:ring-[#005b66]/15"
-                    }`}
+                    placeholder="••••••••"
+                    className="w-full bg-[#f1f5f9] border border-transparent focus:border-indigo-500 focus:bg-white rounded-2xl pl-10 pr-10 py-3 text-sm text-slate-800 placeholder:text-slate-400 outline-none transition-all"
                   />
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 focus:outline-none"
+                    className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 focus:outline-none"
                   >
-                    {showPassword ? (
-                      <EyeOff className="w-4 h-4" />
-                    ) : (
-                      <Eye className="w-4 h-4" />
-                    )}
+                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                   </button>
                 </div>
               </div>
 
-              {/* Remember Me & Forgot Password */}
-              <div className="flex items-center justify-between pt-0.5">
+              {/* Options: Remember me & Forgot Password */}
+              <div className="flex items-center justify-between pt-1">
                 <label className="flex items-center gap-2 cursor-pointer select-none">
                   <input
                     type="checkbox"
                     checked={rememberMe}
                     onChange={(e) => setRememberMe(e.target.checked)}
-                    className="w-4 h-4 rounded border-slate-300 text-[#005a66] focus:ring-[#005a66]/20 accent-[#005a66]"
+                    className="w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500/30 accent-indigo-600"
                   />
-                  <span
-                    className={`text-xs ${
-                      darkMode ? "text-slate-300" : "text-slate-600"
-                    }`}
-                  >
-                    {t.rememberMe}
-                  </span>
+                  <span className="text-xs text-slate-700 font-medium">Ghi nhớ tôi</span>
                 </label>
 
                 <button
@@ -517,211 +441,124 @@ export default function AuthCard() {
                     setActiveTab("forgot");
                     setStatusMessage(null);
                   }}
-                  className="text-xs font-semibold text-[#00606e] dark:text-teal-400 hover:underline"
+                  className="text-xs font-semibold text-rose-600 hover:text-rose-700 hover:underline"
                 >
-                  {t.forgotPassword}
+                  Quên mật khẩu?
                 </button>
               </div>
 
-              {/* Primary Submit Button */}
+              {/* Primary Submit Button: Purple to Pink Gradient */}
               <button
                 type="submit"
-                className="w-full py-3.5 px-4 rounded-xl text-white font-medium text-sm transition-all duration-200 shadow-md shadow-teal-950/15 cursor-pointer bg-gradient-to-r from-[#005159] to-[#01657c] hover:from-[#00434a] hover:to-[#015669] active:scale-[0.99]"
+                disabled={isLoading}
+                className="w-full py-3.5 px-4 rounded-2xl text-white font-semibold text-sm transition-all duration-300 shadow-lg shadow-indigo-500/25 cursor-pointer bg-gradient-to-r from-[#4f46e5] via-[#7c3aed] to-[#db2777] hover:from-[#4338ca] hover:via-[#6d28d9] hover:to-[#be185d] active:scale-[0.99] disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2 mt-2"
               >
-                {t.btnLogin}
+                <span>{isLoading ? "Đang xử lý..." : "Đăng nhập ngay"}</span>
+                {!isLoading && <ArrowRight className="w-4 h-4" />}
               </button>
 
-              {/* Divider: HOẶC TIẾP TỤC VỚI */}
-              <div className="relative flex items-center justify-center my-5">
-                <div
-                  className={`w-full border-t ${
-                    darkMode ? "border-slate-800" : "border-slate-200"
-                  }`}
-                />
-                <span
-                  className={`absolute px-3 text-[11px] font-semibold tracking-wider uppercase select-none ${
-                    darkMode
-                      ? "bg-[#131d24] text-slate-500"
-                      : "bg-white text-slate-400"
-                  }`}
-                >
-                  {t.orContinueWith}
-                </span>
+              {/* Bottom Support Link */}
+              <div className="text-center pt-5">
+                <p className="text-xs text-slate-500">
+                  Cần hỗ trợ cho nhóm của bạn?{" "}
+                  <a
+                    href="#support"
+                    className="font-semibold text-indigo-600 hover:text-indigo-800 hover:underline"
+                  >
+                    Liên hệ đội ngũ Trippo 24/7
+                  </a>
+                </p>
               </div>
-
-              {/* Google Button */}
-              <button
-                type="button"
-                className={`w-full py-3 px-4 rounded-xl border text-sm font-medium flex items-center justify-center gap-2.5 transition-all shadow-sm ${
-                  darkMode
-                    ? "bg-slate-800/70 border-slate-700 text-slate-200 hover:bg-slate-800"
-                    : "bg-[#f8fafc] border-slate-200/90 text-slate-700 hover:bg-slate-100"
-                }`}
-              >
-                {/* Standard Google multi-color SVG */}
-                <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24">
-                  <path
-                    fill="#4285F4"
-                    d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.66-5.17 3.66-9.17z"
-                  />
-                  <path
-                    fill="#34A853"
-                    d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.1-6.72-4.93H1.25v3.15C3.26 21.36 7.34 24 12 24z"
-                  />
-                  <path
-                    fill="#FBBC05"
-                    d="M5.28 14.27c-.25-.72-.38-1.49-.38-2.27s.13-1.55.38-2.27V6.58H1.25C.45 8.18 0 10.03 0 12s.45 3.82 1.25 5.42l4.03-3.15z"
-                  />
-                  <path
-                    fill="#EA4335"
-                    d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.34 0 3.26 2.64 1.25 6.58l4.03 3.15c.95-2.83 3.6-4.98 6.72-4.98z"
-                  />
-                </svg>
-                <span>{t.googleLogin}</span>
-              </button>
-
-              {/* Bottom Switch to Register */}
-              <p
-                className={`text-center text-xs mt-5 ${
-                  darkMode ? "text-slate-400" : "text-slate-600"
-                }`}
-              >
-                {t.noAccount}{" "}
-                <button
-                  type="button"
-                  onClick={() => {
-                    setActiveTab("register");
-                    setStatusMessage(null);
-                  }}
-                  className="font-semibold text-[#00606e] dark:text-teal-400 hover:underline"
-                >
-                  {t.registerNow}
-                </button>
-              </p>
             </form>
           )}
 
-          {/* TAB 2: ĐĂNG KÝ (REGISTER FORM) */}
+          {/* =========================================
+              TAB 2: ĐĂNG KÝ (REGISTER FORM)
+              ========================================= */}
           {activeTab === "register" && (
-            <form onSubmit={handleRegisterSubmit} className="mt-5 space-y-3.5">
+            <form onSubmit={handleRegisterSubmit} className="space-y-3.5">
               {/* Full Name */}
               <div>
-                <label
-                  className={`block text-xs font-semibold mb-1.5 ${
-                    darkMode ? "text-slate-300" : "text-slate-700"
-                  }`}
-                >
-                  {t.nameLabel}
+                <label className="block text-xs font-bold text-slate-800 mb-1.5">
+                  Họ và tên
                 </label>
                 <div className="relative">
                   <User className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
                   <input
                     type="text"
+                    required
                     value={registerName}
                     onChange={(e) => setRegisterName(e.target.value)}
-                    placeholder={t.namePlaceholder}
-                    className={`w-full text-sm rounded-xl pl-10 pr-4 py-2.5 border transition-all outline-none ${
-                      darkMode
-                        ? "bg-slate-800/60 border-slate-700 text-slate-100 placeholder:text-slate-500 focus:border-teal-500 focus:bg-slate-800"
-                        : "bg-[#f8fafc] border-slate-200/90 text-slate-800 placeholder:text-slate-400 focus:border-[#005b66] focus:bg-white focus:ring-2 focus:ring-[#005b66]/15"
-                    }`}
+                    placeholder="Nguyễn Văn A"
+                    className="w-full bg-[#f1f5f9] border border-transparent focus:border-indigo-500 focus:bg-white rounded-2xl pl-10 pr-4 py-2.5 text-sm text-slate-800 placeholder:text-slate-400 outline-none transition-all"
                   />
                 </div>
               </div>
 
               {/* Email */}
               <div>
-                <label
-                  className={`block text-xs font-semibold mb-1.5 ${
-                    darkMode ? "text-slate-300" : "text-slate-700"
-                  }`}
-                >
-                  {t.emailLabel}
+                <label className="block text-xs font-bold text-slate-800 mb-1.5">
+                  Địa chỉ email
                 </label>
                 <div className="relative">
                   <Mail className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
                   <input
                     type="email"
+                    required
                     value={registerEmail}
                     onChange={(e) => setRegisterEmail(e.target.value)}
-                    placeholder={t.emailPlaceholder}
-                    className={`w-full text-sm rounded-xl pl-10 pr-4 py-2.5 border transition-all outline-none ${
-                      darkMode
-                        ? "bg-slate-800/60 border-slate-700 text-slate-100 placeholder:text-slate-500 focus:border-teal-500 focus:bg-slate-800"
-                        : "bg-[#f8fafc] border-slate-200/90 text-slate-800 placeholder:text-slate-400 focus:border-[#005b66] focus:bg-white focus:ring-2 focus:ring-[#005b66]/15"
-                    }`}
+                    placeholder="ban@vidu.com"
+                    className="w-full bg-[#f1f5f9] border border-transparent focus:border-indigo-500 focus:bg-white rounded-2xl pl-10 pr-4 py-2.5 text-sm text-slate-800 placeholder:text-slate-400 outline-none transition-all"
                   />
                 </div>
               </div>
 
               {/* Password */}
               <div>
-                <label
-                  className={`block text-xs font-semibold mb-1.5 ${
-                    darkMode ? "text-slate-300" : "text-slate-700"
-                  }`}
-                >
-                  {t.passwordLabel}
+                <label className="block text-xs font-bold text-slate-800 mb-1.5">
+                  Mật khẩu
                 </label>
                 <div className="relative">
                   <Lock className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
                   <input
                     type={showPassword ? "text" : "password"}
+                    required
                     value={registerPassword}
                     onChange={(e) => setRegisterPassword(e.target.value)}
-                    placeholder={t.passwordPlaceholder}
-                    className={`w-full text-sm rounded-xl pl-10 pr-10 py-2.5 border transition-all outline-none ${
-                      darkMode
-                        ? "bg-slate-800/60 border-slate-700 text-slate-100 placeholder:text-slate-500 focus:border-teal-500 focus:bg-slate-800"
-                        : "bg-[#f8fafc] border-slate-200/90 text-slate-800 placeholder:text-slate-400 focus:border-[#005b66] focus:bg-white focus:ring-2 focus:ring-[#005b66]/15"
-                    }`}
+                    placeholder="Tối thiểu 6 ký tự"
+                    className="w-full bg-[#f1f5f9] border border-transparent focus:border-indigo-500 focus:bg-white rounded-2xl pl-10 pr-10 py-2.5 text-sm text-slate-800 placeholder:text-slate-400 outline-none transition-all"
                   />
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 focus:outline-none"
+                    className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 focus:outline-none"
                   >
-                    {showPassword ? (
-                      <EyeOff className="w-4 h-4" />
-                    ) : (
-                      <Eye className="w-4 h-4" />
-                    )}
+                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                   </button>
                 </div>
               </div>
 
               {/* Confirm Password */}
               <div>
-                <label
-                  className={`block text-xs font-semibold mb-1.5 ${
-                    darkMode ? "text-slate-300" : "text-slate-700"
-                  }`}
-                >
-                  {t.confirmPasswordLabel}
+                <label className="block text-xs font-bold text-slate-800 mb-1.5">
+                  Xác nhận mật khẩu
                 </label>
                 <div className="relative">
                   <Lock className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
                   <input
                     type={showConfirmPassword ? "text" : "password"}
+                    required
                     value={registerConfirmPassword}
                     onChange={(e) => setRegisterConfirmPassword(e.target.value)}
-                    placeholder={t.passwordPlaceholder}
-                    className={`w-full text-sm rounded-xl pl-10 pr-10 py-2.5 border transition-all outline-none ${
-                      darkMode
-                        ? "bg-slate-800/60 border-slate-700 text-slate-100 placeholder:text-slate-500 focus:border-teal-500 focus:bg-slate-800"
-                        : "bg-[#f8fafc] border-slate-200/90 text-slate-800 placeholder:text-slate-400 focus:border-[#005b66] focus:bg-white focus:ring-2 focus:ring-[#005b66]/15"
-                    }`}
+                    placeholder="Nhập lại mật khẩu"
+                    className="w-full bg-[#f1f5f9] border border-transparent focus:border-indigo-500 focus:bg-white rounded-2xl pl-10 pr-10 py-2.5 text-sm text-slate-800 placeholder:text-slate-400 outline-none transition-all"
                   />
                   <button
                     type="button"
                     onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                    className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 focus:outline-none"
+                    className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 focus:outline-none"
                   >
-                    {showConfirmPassword ? (
-                      <EyeOff className="w-4 h-4" />
-                    ) : (
-                      <Eye className="w-4 h-4" />
-                    )}
+                    {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                   </button>
                 </div>
               </div>
@@ -733,144 +570,87 @@ export default function AuthCard() {
                     type="checkbox"
                     checked={agreeTerms}
                     onChange={(e) => setAgreeTerms(e.target.checked)}
-                    className="w-4 h-4 mt-0.5 rounded border-slate-300 text-[#005a66] focus:ring-[#005a66]/20 accent-[#005a66]"
+                    className="w-4 h-4 mt-0.5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500/20 accent-indigo-600"
                   />
-                  <span
-                    className={`text-xs leading-relaxed ${
-                      darkMode ? "text-slate-300" : "text-slate-600"
-                    }`}
-                  >
-                    {t.agreeTerms}
+                  <span className="text-xs text-slate-600 leading-snug">
+                    Tôi đồng ý với{" "}
+                    <a href="#terms" className="text-indigo-600 hover:underline">
+                      Điều khoản dịch vụ
+                    </a>{" "}
+                    và{" "}
+                    <a href="#privacy" className="text-indigo-600 hover:underline">
+                      Chính sách bảo mật
+                    </a>
                   </span>
                 </label>
               </div>
 
-              {/* Primary Register Button */}
+              {/* Submit Register Button */}
               <button
                 type="submit"
-                className="w-full py-3.5 px-4 rounded-xl text-white font-medium text-sm transition-all duration-200 shadow-md shadow-teal-950/15 cursor-pointer bg-gradient-to-r from-[#005159] to-[#01657c] hover:from-[#00434a] hover:to-[#015669] active:scale-[0.99] mt-2"
+                disabled={isLoading}
+                className="w-full py-3.5 px-4 rounded-2xl text-white font-semibold text-sm transition-all duration-300 shadow-lg shadow-indigo-500/25 cursor-pointer bg-gradient-to-r from-[#4f46e5] via-[#7c3aed] to-[#db2777] hover:from-[#4338ca] hover:via-[#6d28d9] hover:to-[#be185d] active:scale-[0.99] disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2 mt-3"
               >
-                {t.btnRegister}
+                <span>{isLoading ? "Đang xử lý..." : "Đăng ký tài khoản"}</span>
+                {!isLoading && <ArrowRight className="w-4 h-4" />}
               </button>
 
-              {/* Divider */}
-              <div className="relative flex items-center justify-center my-4">
-                <div
-                  className={`w-full border-t ${
-                    darkMode ? "border-slate-800" : "border-slate-200"
-                  }`}
-                />
-                <span
-                  className={`absolute px-3 text-[11px] font-semibold tracking-wider uppercase select-none ${
-                    darkMode
-                      ? "bg-[#131d24] text-slate-500"
-                      : "bg-white text-slate-400"
-                  }`}
-                >
-                  {t.orContinueWith}
-                </span>
+              <div className="text-center pt-3">
+                <p className="text-xs text-slate-500">
+                  Đã có tài khoản?{" "}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setActiveTab("login");
+                      setStatusMessage(null);
+                    }}
+                    className="font-bold text-indigo-600 hover:underline"
+                  >
+                    Đăng nhập ngay
+                  </button>
+                </p>
               </div>
-
-              {/* Google Button */}
-              <button
-                type="button"
-                className={`w-full py-2.5 px-4 rounded-xl border text-sm font-medium flex items-center justify-center gap-2.5 transition-all shadow-sm ${
-                  darkMode
-                    ? "bg-slate-800/70 border-slate-700 text-slate-200 hover:bg-slate-800"
-                    : "bg-[#f8fafc] border-slate-200/90 text-slate-700 hover:bg-slate-100"
-                }`}
-              >
-                <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24">
-                  <path
-                    fill="#4285F4"
-                    d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.66-5.17 3.66-9.17z"
-                  />
-                  <path
-                    fill="#34A853"
-                    d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.1-6.72-4.93H1.25v3.15C3.26 21.36 7.34 24 12 24z"
-                  />
-                  <path
-                    fill="#FBBC05"
-                    d="M5.28 14.27c-.25-.72-.38-1.49-.38-2.27s.13-1.55.38-2.27V6.58H1.25C.45 8.18 0 10.03 0 12s.45 3.82 1.25 5.42l4.03-3.15z"
-                  />
-                  <path
-                    fill="#EA4335"
-                    d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.34 0 3.26 2.64 1.25 6.58l4.03 3.15c.95-2.83 3.6-4.98 6.72-4.98z"
-                  />
-                </svg>
-                <span>{t.googleRegister}</span>
-              </button>
-
-              {/* Bottom Switch to Login */}
-              <p
-                className={`text-center text-xs mt-4 ${
-                  darkMode ? "text-slate-400" : "text-slate-600"
-                }`}
-              >
-                {t.hasAccount}{" "}
-                <button
-                  type="button"
-                  onClick={() => {
-                    setActiveTab("login");
-                    setStatusMessage(null);
-                  }}
-                  className="font-semibold text-[#00606e] dark:text-teal-400 hover:underline"
-                >
-                  {t.loginNow}
-                </button>
-              </p>
             </form>
           )}
 
-          {/* TAB 3: QUÊN MẬT KHẨU (FORGOT PASSWORD FORM) */}
+          {/* =========================================
+              TAB 3: QUÊN MẬT KHẨU (FORGOT FORM)
+              ========================================= */}
           {activeTab === "forgot" && (
-            <form onSubmit={handleForgotSubmit} className="mt-6 space-y-4">
-              <div className="text-center mb-2">
-                <h2
-                  className={`text-base font-bold ${
-                    darkMode ? "text-white" : "text-slate-800"
-                  }`}
-                >
-                  {t.forgotTitle}
-                </h2>
-                <p
-                  className={`text-xs mt-1 leading-relaxed ${
-                    darkMode ? "text-slate-400" : "text-slate-500"
-                  }`}
-                >
-                  {t.forgotDesc}
+            <form onSubmit={handleForgotSubmit} className="space-y-4">
+              <div className="text-center mb-4">
+                <h3 className="text-base font-bold text-slate-900">
+                  Khôi phục mật khẩu
+                </h3>
+                <p className="text-xs text-slate-500 mt-1">
+                  Nhập email đăng ký của bạn để nhận liên kết đặt lại mật khẩu.
                 </p>
               </div>
 
               <div>
-                <label
-                  className={`block text-xs font-semibold mb-1.5 ${
-                    darkMode ? "text-slate-300" : "text-slate-700"
-                  }`}
-                >
-                  {t.emailLabel}
+                <label className="block text-xs font-bold text-slate-800 mb-1.5">
+                  Địa chỉ email
                 </label>
                 <div className="relative">
                   <Mail className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
                   <input
                     type="email"
+                    required
                     value={forgotEmail}
                     onChange={(e) => setForgotEmail(e.target.value)}
-                    placeholder={t.emailPlaceholder}
-                    className={`w-full text-sm rounded-xl pl-10 pr-4 py-3 border transition-all outline-none ${
-                      darkMode
-                        ? "bg-slate-800/60 border-slate-700 text-slate-100 placeholder:text-slate-500 focus:border-teal-500 focus:bg-slate-800"
-                        : "bg-[#f8fafc] border-slate-200/90 text-slate-800 placeholder:text-slate-400 focus:border-[#005b66] focus:bg-white focus:ring-2 focus:ring-[#005b66]/15"
-                    }`}
+                    placeholder="ban@vidu.com"
+                    className="w-full bg-[#f1f5f9] border border-transparent focus:border-indigo-500 focus:bg-white rounded-2xl pl-10 pr-4 py-3 text-sm text-slate-800 placeholder:text-slate-400 outline-none transition-all"
                   />
                 </div>
               </div>
 
               <button
                 type="submit"
-                className="w-full py-3.5 px-4 rounded-xl text-white font-medium text-sm transition-all duration-200 shadow-md shadow-teal-950/15 cursor-pointer bg-gradient-to-r from-[#005159] to-[#01657c] hover:from-[#00434a] hover:to-[#015669] active:scale-[0.99]"
+                disabled={isLoading}
+                className="w-full py-3.5 px-4 rounded-2xl text-white font-semibold text-sm transition-all duration-300 shadow-lg shadow-indigo-500/25 cursor-pointer bg-gradient-to-r from-[#4f46e5] via-[#7c3aed] to-[#db2777] hover:from-[#4338ca] hover:via-[#6d28d9] hover:to-[#be185d] active:scale-[0.99] disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2 mt-2"
               >
-                {t.btnReset}
+                <span>{isLoading ? "Đang gửi..." : "Gửi liên kết đặt lại mật khẩu"}</span>
+                {!isLoading && <ArrowRight className="w-4 h-4" />}
               </button>
 
               <div className="text-center pt-2">
@@ -880,39 +660,21 @@ export default function AuthCard() {
                     setActiveTab("login");
                     setStatusMessage(null);
                   }}
-                  className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200"
+                  className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-600 hover:text-slate-900"
                 >
                   <ArrowLeft className="w-3.5 h-3.5" />
-                  <span>{t.backToLogin}</span>
+                  <span>Quay lại đăng nhập</span>
                 </button>
               </div>
             </form>
           )}
         </div>
-      </main>
 
-      {/* Footer Bottom */}
-      <footer className="relative z-20 w-full max-w-7xl mx-auto px-6 py-6 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
-        <p className={darkMode ? "text-slate-500" : "text-slate-500"}>
-          {t.copyright}
-        </p>
-
-        <div
-          className={`flex items-center gap-5 font-medium ${
-            darkMode ? "text-slate-400" : "text-slate-600"
-          }`}
-        >
-          <a href="#privacy" className="hover:underline">
-            {t.privacy}
-          </a>
-          <a href="#terms" className="hover:underline">
-            {t.terms}
-          </a>
-          <a href="#support" className="hover:underline">
-            {t.support}
-          </a>
+        {/* Footer Right */}
+        <div className="text-center text-[11px] text-slate-400 pt-4">
+          Bằng việc tiếp tục, bạn đồng ý với Điều khoản dịch vụ và Chính sách bảo mật của chúng tôi.
         </div>
-      </footer>
+      </div>
     </div>
   );
 }
