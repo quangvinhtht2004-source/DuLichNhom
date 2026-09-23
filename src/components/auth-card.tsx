@@ -15,6 +15,7 @@ import {
   CheckCircle2,
   AlertCircle,
   HelpCircle,
+  Loader2,
 } from "lucide-react";
 
 type AuthTab = "login" | "register" | "forgot";
@@ -470,8 +471,17 @@ export default function AuthCard() {
                 disabled={isLoading}
                 className="w-full py-3.5 px-4 rounded-2xl text-white font-semibold text-sm transition-all duration-300 shadow-lg shadow-indigo-500/25 cursor-pointer bg-gradient-to-r from-[#4f46e5] via-[#7c3aed] to-[#db2777] hover:from-[#4338ca] hover:via-[#6d28d9] hover:to-[#be185d] active:scale-[0.99] disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2 mt-2"
               >
-                <span>{isLoading ? "Đang xử lý..." : "Đăng nhập ngay"}</span>
-                {!isLoading && <ArrowRight className="w-4 h-4" />}
+                {isLoading ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spinner" />
+                    <span>Đang xử lý...</span>
+                  </>
+                ) : (
+                  <>
+                    <span>Đăng nhập ngay</span>
+                    <ArrowRight className="w-4 h-4" />
+                  </>
+                )}
               </button>
 
               {/* Bottom Support Link */}
@@ -608,8 +618,17 @@ export default function AuthCard() {
                 disabled={isLoading}
                 className="w-full py-3.5 px-4 rounded-2xl text-white font-semibold text-sm transition-all duration-300 shadow-lg shadow-indigo-500/25 cursor-pointer bg-gradient-to-r from-[#4f46e5] via-[#7c3aed] to-[#db2777] hover:from-[#4338ca] hover:via-[#6d28d9] hover:to-[#be185d] active:scale-[0.99] disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2 mt-3"
               >
-                <span>{isLoading ? "Đang xử lý..." : "Đăng ký tài khoản"}</span>
-                {!isLoading && <ArrowRight className="w-4 h-4" />}
+                {isLoading ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spinner" />
+                    <span>Đang xử lý...</span>
+                  </>
+                ) : (
+                  <>
+                    <span>Đăng ký tài khoản</span>
+                    <ArrowRight className="w-4 h-4" />
+                  </>
+                )}
               </button>
 
               <div className="text-center pt-3">
@@ -666,8 +685,17 @@ export default function AuthCard() {
                 disabled={isLoading}
                 className="w-full py-3.5 px-4 rounded-2xl text-white font-semibold text-sm transition-all duration-300 shadow-lg shadow-indigo-500/25 cursor-pointer bg-gradient-to-r from-[#4f46e5] via-[#7c3aed] to-[#db2777] hover:from-[#4338ca] hover:via-[#6d28d9] hover:to-[#be185d] active:scale-[0.99] disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2 mt-2"
               >
-                <span>{isLoading ? "Đang gửi..." : "Gửi liên kết đặt lại mật khẩu"}</span>
-                {!isLoading && <ArrowRight className="w-4 h-4" />}
+                {isLoading ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spinner" />
+                    <span>Đang gửi...</span>
+                  </>
+                ) : (
+                  <>
+                    <span>Gửi liên kết đặt lại mật khẩu</span>
+                    <ArrowRight className="w-4 h-4" />
+                  </>
+                )}
               </button>
 
               <div className="text-center pt-2">

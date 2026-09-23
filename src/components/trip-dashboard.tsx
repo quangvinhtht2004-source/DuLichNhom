@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { formatDateToDisplay } from "@/lib/date-utils";
 import CreateTripModal from "./create-trip-modal";
 import InviteFriendsModal from "./invite-friends-modal";
 import TripInviteModal from "./trip-invite-modal";
@@ -28,7 +29,6 @@ import {
   Upload,
   Sparkles,
   ArrowRight,
-  Code,
   Play,
   RotateCcw,
   ExternalLink,
@@ -79,7 +79,9 @@ export default function TripDashboard({ initialProfile }: TripDashboardProps = {
     return "Hoàng Nam";
   });
   const [userAvatar, setUserAvatar] = useState<string | null>(() => {
-    if (initialProfile?.avatar_url) return initialProfile.avatar_url;
+    if (initialProfile !== undefined && initialProfile !== null) {
+      return initialProfile.avatar_url || null;
+    }
     if (typeof window !== "undefined") {
       const saved = sessionStorage.getItem("user_avatar_url");
       if (saved) return saved;
@@ -128,17 +130,6 @@ export default function TripDashboard({ initialProfile }: TripDashboardProps = {
   // Create Trip Modal
   const [showCreateModal, setShowCreateModal] = useState<boolean>(false);
 
-  // API Tester Drawer State (Full 9 APIs testing on UI)
-  const [showApiTester, setShowApiTester] = useState<boolean>(false);
-  const [apiTestingLoading, setApiTestingLoading] = useState<boolean>(false);
-  const [apiResult, setApiResult] = useState<{
-    endpoint: string;
-    method: string;
-    status: number;
-    data: any;
-    time: string;
-  } | null>(null);
-
   // Fetch Trips directly from Supabase Database
   const fetchTrips = async () => {
     try {
@@ -157,8 +148,8 @@ export default function TripDashboard({ initialProfile }: TripDashboardProps = {
             coverImage:
               t.cover_image_url ||
               "https://images.unsplash.com/photo-1506744038136-46273834b3fb?q=80&w=800&auto=format&fit=crop",
-            startDate: t.start_date || "15/10/2026",
-            endDate: t.end_date || "18/10/2026",
+            startDate: formatDateToDisplay(t.start_date) || "15/10/2026",
+            endDate: formatDateToDisplay(t.end_date) || "18/10/2026",
             location: t.destination || "Việt Nam",
             members: [
               { initials: "HN", bg: "bg-indigo-600" },
@@ -198,6 +189,11 @@ export default function TripDashboard({ initialProfile }: TripDashboardProps = {
             setUserAvatar(json.profile.avatar_url);
             if (typeof window !== "undefined") {
               sessionStorage.setItem("user_avatar_url", json.profile.avatar_url);
+            }
+          } else if (json?.profile && json.profile.avatar_url === null) {
+            setUserAvatar(null);
+            if (typeof window !== "undefined") {
+              sessionStorage.removeItem("user_avatar_url");
             }
           }
           if (json?.profile?.email) {
@@ -340,50 +336,6 @@ export default function TripDashboard({ initialProfile }: TripDashboardProps = {
     },
   ];
 
-  // API Execution Runner for the Tester Console
-  const executeApiTest = async (
-    endpoint: string,
-    method: "GET" | "POST" | "PATCH",
-    body?: any
-  ) => {
-    setApiTestingLoading(true);
-    try {
-      const options: RequestInit = {
-        method,
-        headers: body ? { "Content-Type": "application/json" } : undefined,
-        body: body ? JSON.stringify(body) : undefined,
-      };
-      const res = await fetch(endpoint, options);
-      let data: any;
-      try {
-        data = await res.json();
-      } catch {
-        data = { message: "Không có JSON trả về" };
-      }
-      setApiResult({
-        endpoint,
-        method,
-        status: res.status,
-        data,
-        time: new Date().toLocaleTimeString(),
-      });
-      // If profile updated, refresh userName
-      if (endpoint === "/api/auth/profile" && method === "GET" && data?.profile?.full_name) {
-        setUserName(data.profile.full_name);
-      }
-    } catch (err: any) {
-      setApiResult({
-        endpoint,
-        method,
-        status: 500,
-        data: { error: err.message || "Lỗi kết nối" },
-        time: new Date().toLocaleTimeString(),
-      });
-    } finally {
-      setApiTestingLoading(false);
-    }
-  };
-
   return (
     <div className="min-h-screen bg-[#f8fafc] text-slate-800 font-sans pb-16 selection:bg-indigo-500 selection:text-white">
       {/* 1. TOP NAVBAR */}
@@ -456,15 +408,22 @@ export default function TripDashboard({ initialProfile }: TripDashboardProps = {
               </button>
 
               {showNotifications && (
-                <div className="absolute right-0 mt-2 w-80 bg-white rounded-2xl shadow-2xl border border-slate-100 py-3 z-50 text-xs animate-fadeIn">
-                  <div className="px-4 pb-2.5 border-b border-slate-100 flex items-center justify-between">
-                    <span className="font-extrabold text-slate-900">
+                <div className="absolute right-0 mt-2 w-84 sm:w-88 bg-white rounded-2xl shadow-2xl border border-slate-100 py-3 z-50 text-xs animate-fadeIn">
+                  <div className="px-4 pb-2.5 border-b border-slate-100 flex items-center justify-between gap-2">
+                    <span className="font-extrabold text-slate-900 shrink-0">
                       Thông báo {hasInvite ? "(1)" : "(0)"}
                     </span>
                     {hasInvite && (
-                      <span className="text-[10px] font-bold text-rose-600 bg-rose-50 px-2 py-0.5 rounded-md border border-rose-100">
-                        1 lời mời mới
-                      </span>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setHasInvite(false);
+                        }}
+                        className="text-[11px] font-semibold text-[#5235ab] hover:text-[#3e2487] hover:bg-[#eeedfd] px-2 py-0.5 rounded-lg transition-all cursor-pointer truncate"
+                      >
+                        Đánh dấu tất cả là đã đọc
+                      </button>
                     )}
                   </div>
 
@@ -758,16 +717,45 @@ export default function TripDashboard({ initialProfile }: TripDashboardProps = {
         {/* 4. MAIN TRIP GRID (TRIP CARDS + INVITATION) */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 items-start">
           {isLoadingTrips && trips.length === 0 && (
-            <div className="col-span-full py-12 flex flex-col items-center justify-center text-slate-400 gap-3">
-              <div className="w-8 h-8 rounded-full border-2 border-indigo-600 border-t-transparent animate-spin"></div>
-              <span className="text-xs font-medium">Đang tải danh sách chuyến đi từ cơ sở dữ liệu Supabase...</span>
-            </div>
+            <>
+              {[1, 2, 3].map((i) => (
+                <div
+                  key={`skeleton-${i}`}
+                  className={`bg-white rounded-3xl border border-slate-200/80 shadow-sm overflow-hidden animate-fadeInUp stagger-${i}`}
+                >
+                  {/* Cover image skeleton */}
+                  <div className="h-48 w-full animate-shimmer" />
+                  {/* Content skeleton */}
+                  <div className="p-5 space-y-3">
+                    <div className="w-24 h-5 rounded-full animate-shimmer" />
+                    <div className="w-3/4 h-4 rounded-lg animate-shimmer" />
+                    <div className="space-y-1.5">
+                      <div className="w-40 h-3 rounded-md animate-shimmer" />
+                      <div className="w-32 h-3 rounded-md animate-shimmer" />
+                    </div>
+                  </div>
+                  {/* Bottom skeleton */}
+                  <div className="p-5 pt-0 border-t border-slate-100 mt-2">
+                    <div className="flex items-center justify-between pt-3">
+                      <div className="flex -space-x-1.5">
+                        {[1, 2, 3].map((j) => (
+                          <div key={j} className="w-7 h-7 rounded-full animate-shimmer ring-2 ring-white" />
+                        ))}
+                      </div>
+                      <div className="w-20 h-3 rounded-md animate-shimmer" />
+                    </div>
+                    <div className="w-full h-1.5 rounded-full animate-shimmer mt-2.5" />
+                  </div>
+                </div>
+              ))}
+            </>
           )}
 
-          {activeFilterTab === "upcoming" && trips.map((trip) => (
+          {activeFilterTab === "upcoming" && trips.map((trip, index) => (
             <div
               key={trip.id}
-              className="bg-white rounded-3xl border border-slate-200/80 shadow-sm hover:shadow-md transition-all overflow-hidden flex flex-col justify-between group"
+              className={`bg-white rounded-3xl border border-slate-200/80 shadow-sm hover:shadow-lg hover:-translate-y-1 transition-all duration-300 overflow-hidden flex flex-col justify-between group animate-fadeInUp`}
+              style={{ animationDelay: `${index * 0.08}s` }}
             >
               <div>
                 {/* Cover Image Container */}
@@ -1242,220 +1230,6 @@ export default function TripDashboard({ initialProfile }: TripDashboardProps = {
         </div>
       )}
 
-      {/* =========================================================
-          9. FLOATING API TESTER CONSOLE (TEST ĐƯỢC HẾT 9 API TRÊN UI)
-          ========================================================= */}
-      {/* Floating Action Button */}
-      <div className="fixed bottom-6 right-6 z-40">
-        <button
-          onClick={() => setShowApiTester(!showApiTester)}
-          className="flex items-center gap-2 px-4 py-3 rounded-full bg-gradient-to-r from-indigo-600 to-pink-600 text-white text-xs font-bold shadow-2xl shadow-indigo-600/40 hover:scale-105 active:scale-95 transition-all cursor-pointer border border-white/20"
-        >
-          <Code className="w-4 h-4" />
-          <span>Kiểm thử 9 API Backend</span>
-        </button>
-      </div>
-
-      {/* API Tester Drawer / Modal */}
-      {showApiTester && (
-        <div className="fixed inset-y-0 right-0 z-50 w-full sm:w-[460px] bg-white shadow-2xl border-l border-slate-200 flex flex-col justify-between animate-fadeIn">
-          {/* Header */}
-          <div className="p-4 border-b border-slate-200 flex items-center justify-between bg-slate-50">
-            <div className="flex items-center gap-2">
-              <div className="w-7 h-7 rounded-lg bg-indigo-600 text-white flex items-center justify-center font-bold text-xs">
-                API
-              </div>
-              <div>
-                <h3 className="text-xs font-bold text-slate-900">
-                  Bảng Điều Khiển Test 9 API
-                </h3>
-                <p className="text-[10px] text-slate-500">
-                  Gửi request thật đến Supabase và xem JSON trả về
-                </p>
-              </div>
-            </div>
-            <button
-              onClick={() => setShowApiTester(false)}
-              className="p-1 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-200"
-            >
-              <X className="w-4 h-4" />
-            </button>
-          </div>
-
-          {/* Test Buttons List */}
-          <div className="flex-1 overflow-y-auto p-4 space-y-4 text-xs">
-            {/* Group 1: Auth Login & Register */}
-            <div>
-              <p className="font-bold text-slate-400 text-[10px] uppercase tracking-wider mb-2">
-                1. Đăng nhập & Đăng ký
-              </p>
-              <div className="space-y-1.5">
-                <button
-                  disabled={apiTestingLoading}
-                  onClick={() =>
-                    executeApiTest("/api/auth/login", "POST", {
-                      email: "test@dulichnhom.com",
-                      password: "Password123@!",
-                    })
-                  }
-                  className="w-full text-left p-2.5 rounded-xl border border-slate-200 hover:bg-indigo-50 hover:border-indigo-300 flex items-center justify-between font-medium transition-all"
-                >
-                  <span className="font-mono text-[11px] text-emerald-700 font-bold">
-                    POST /api/auth/login
-                  </span>
-                  <span className="text-[11px] text-slate-500">Test login mẫu</span>
-                </button>
-
-                <button
-                  disabled={apiTestingLoading}
-                  onClick={() =>
-                    executeApiTest("/api/auth/register", "POST", {
-                      email: `user_${Date.now()}@dulichnhom.com`,
-                      password: "Password123@!",
-                      full_name: "Tester Auto",
-                    })
-                  }
-                  className="w-full text-left p-2.5 rounded-xl border border-slate-200 hover:bg-indigo-50 hover:border-indigo-300 flex items-center justify-between font-medium transition-all"
-                >
-                  <span className="font-mono text-[11px] text-indigo-700 font-bold">
-                    POST /api/auth/register
-                  </span>
-                  <span className="text-[11px] text-slate-500">Tạo user ngẫu nhiên</span>
-                </button>
-
-                <button
-                  disabled={apiTestingLoading}
-                  onClick={() => (window.location.href = "/api/auth/google")}
-                  className="w-full text-left p-2.5 rounded-xl border border-slate-200 hover:bg-indigo-50 hover:border-indigo-300 flex items-center justify-between font-medium transition-all"
-                >
-                  <span className="font-mono text-[11px] text-purple-700 font-bold">
-                    GET /api/auth/google
-                  </span>
-                  <span className="text-[11px] text-slate-500">Mở Google OAuth ↗</span>
-                </button>
-              </div>
-            </div>
-
-            {/* Group 2: Profile & Logout */}
-            <div>
-              <p className="font-bold text-slate-400 text-[10px] uppercase tracking-wider mb-2">
-                2. Hồ sơ cá nhân & Đăng xuất
-              </p>
-              <div className="space-y-1.5">
-                <button
-                  disabled={apiTestingLoading}
-                  onClick={() => executeApiTest("/api/auth/profile", "GET")}
-                  className="w-full text-left p-2.5 rounded-xl border border-slate-200 hover:bg-sky-50 hover:border-sky-300 flex items-center justify-between font-medium transition-all"
-                >
-                  <span className="font-mono text-[11px] text-sky-700 font-bold">
-                    GET /api/auth/profile
-                  </span>
-                  <span className="text-[11px] text-slate-500">Lấy profile hiện tại</span>
-                </button>
-
-                <button
-                  disabled={apiTestingLoading}
-                  onClick={() =>
-                    executeApiTest("/api/auth/profile", "PATCH", {
-                      full_name: "Vinked Twice (Đã cập nhật)",
-                      phone: "0987654321",
-                    })
-                  }
-                  className="w-full text-left p-2.5 rounded-xl border border-slate-200 hover:bg-sky-50 hover:border-sky-300 flex items-center justify-between font-medium transition-all"
-                >
-                  <span className="font-mono text-[11px] text-amber-700 font-bold">
-                    PATCH /api/auth/profile
-                  </span>
-                  <span className="text-[11px] text-slate-500">Đổi họ tên & SĐT</span>
-                </button>
-
-                <button
-                  disabled={apiTestingLoading}
-                  onClick={() => executeApiTest("/api/auth/logout", "POST")}
-                  className="w-full text-left p-2.5 rounded-xl border border-slate-200 hover:bg-rose-50 hover:border-rose-300 flex items-center justify-between font-medium transition-all"
-                >
-                  <span className="font-mono text-[11px] text-rose-700 font-bold">
-                    POST /api/auth/logout
-                  </span>
-                  <span className="text-[11px] text-slate-500">Xóa cookie đăng xuất</span>
-                </button>
-              </div>
-            </div>
-
-            {/* Group 3: Password recovery */}
-            <div>
-              <p className="font-bold text-slate-400 text-[10px] uppercase tracking-wider mb-2">
-                3. Quên & Đặt lại mật khẩu
-              </p>
-              <div className="space-y-1.5">
-                <button
-                  disabled={apiTestingLoading}
-                  onClick={() =>
-                    executeApiTest("/api/auth/forgot-password", "POST", {
-                      email: "test@dulichnhom.com",
-                    })
-                  }
-                  className="w-full text-left p-2.5 rounded-xl border border-slate-200 hover:bg-orange-50 hover:border-orange-300 flex items-center justify-between font-medium transition-all"
-                >
-                  <span className="font-mono text-[11px] text-orange-700 font-bold">
-                    POST /api/auth/forgot-password
-                  </span>
-                  <span className="text-[11px] text-slate-500">Gửi mail reset</span>
-                </button>
-
-                <button
-                  disabled={apiTestingLoading}
-                  onClick={() =>
-                    executeApiTest("/api/auth/reset-password", "POST", {
-                      password: "NewPassword123@!",
-                    })
-                  }
-                  className="w-full text-left p-2.5 rounded-xl border border-slate-200 hover:bg-orange-50 hover:border-orange-300 flex items-center justify-between font-medium transition-all"
-                >
-                  <span className="font-mono text-[11px] text-orange-700 font-bold">
-                    POST /api/auth/reset-password
-                  </span>
-                  <span className="text-[11px] text-slate-500">Đổi pass mới</span>
-                </button>
-              </div>
-            </div>
-
-            {/* Response Viewer */}
-            <div className="pt-2 border-t border-slate-200">
-              <div className="flex items-center justify-between mb-1.5">
-                <span className="font-bold text-slate-700 text-xs">
-                  Kết quả phản hồi JSON:
-                </span>
-                {apiResult && (
-                  <span
-                    className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                      apiResult.status < 300
-                        ? "bg-emerald-100 text-emerald-800"
-                        : "bg-rose-100 text-rose-800"
-                    }`}
-                  >
-                    HTTP {apiResult.status} ({apiResult.time})
-                  </span>
-                )}
-              </div>
-
-              <div className="bg-slate-900 rounded-2xl p-3 text-slate-200 font-mono text-[11px] h-48 overflow-y-auto border border-slate-800">
-                {apiTestingLoading ? (
-                  <p className="text-amber-400">Đang gửi request tới API...</p>
-                ) : apiResult ? (
-                  <pre className="whitespace-pre-wrap">
-                    {JSON.stringify(apiResult.data, null, 2)}
-                  </pre>
-                ) : (
-                  <p className="text-slate-500 italic">
-                    Bấm một nút API phía trên để xem kết quả trả về từ Supabase thật...
-                  </p>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* 9. MODAL LỜI MỜI DU LỊCH ĐẶC BIỆT (THEO MOCKUP 100%) */}
       <TripInviteModal

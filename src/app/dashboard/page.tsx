@@ -6,8 +6,8 @@ export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 export const metadata: Metadata = {
-  title: "Đà Lạt 4N3Đ – Săn mây cùng nhóm | TripTogether",
-  description: "Trang tổng quan lịch trình, chi phí và phân công công việc chuyến đi Đà Lạt cùng bạn bè.",
+  title: "Trang tổng quan chuyến đi | Trippo",
+  description: "Quản lý các chuyến đi du lịch nhóm, theo dõi lịch trình và chi phí cùng bạn bè trên Trippo.",
 };
 
 export default async function DashboardPage() {
@@ -32,10 +32,7 @@ export default async function DashboardPage() {
         user.email?.split("@")[0] ||
         "Bạn",
       avatar_url:
-        data?.avatar_url ||
-        user.user_metadata?.avatar_url ||
-        user.user_metadata?.picture ||
-        null,
+        data ? data.avatar_url : (user.user_metadata?.avatar_url || user.user_metadata?.picture || null),
       email: user.email,
     };
   }
