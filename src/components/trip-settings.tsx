@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useRef, useMemo } from "react";
+import { normalizeDateToISO, formatDateToDisplay } from "@/lib/date-utils";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -29,6 +30,7 @@ import {
   Home,
   User,
   ExternalLink,
+  Loader2,
 } from "lucide-react";
 
 interface TripSettingsProps {
@@ -102,24 +104,28 @@ export default function TripSettings({ tripId }: TripSettingsProps) {
   const [isDeleting, setIsDeleting] = useState<boolean>(false);
   const [showDeleteModal, setShowDeleteModal] = useState<boolean>(false);
   const [deleteConfirmInput, setDeleteConfirmInput] = useState<string>("");
+  const [deleteReason, setDeleteReason] = useState<string>("Kế hoạch bị hủy / các thành viên bận");
+  const [customReason, setCustomReason] = useState<string>("");
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  // Check if delete input matches "xoa" regardless of accent style (XÓA, XOÁ, xoa, XOA)
+  const isDeleteConfirmed = useMemo(() => {
+    const raw = deleteConfirmInput.trim().toLowerCase();
+    if (!raw) return false;
+    const normalized = raw
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "");
+    return normalized === "xoa";
+  }, [deleteConfirmInput]);
 
   // Calculate Duration Text (e.g. "3 ngày 2 đêm")
   const durationBadge = useMemo(() => {
     try {
-      const partsStart = startDate.split("/");
-      const partsEnd = endDate.split("/");
-      if (partsStart.length === 3 && partsEnd.length === 3) {
-        const d1 = new Date(
-          parseInt(partsStart[2]),
-          parseInt(partsStart[1]) - 1,
-          parseInt(partsStart[0])
-        );
-        const d2 = new Date(
-          parseInt(partsEnd[2]),
-          parseInt(partsEnd[1]) - 1,
-          parseInt(partsEnd[0])
-        );
+      const s = normalizeDateToISO(startDate);
+      const e = normalizeDateToISO(endDate);
+      if (s && e) {
+        const d1 = new Date(s);
+        const d2 = new Date(e);
         const diffTime = Math.abs(d2.getTime() - d1.getTime());
         const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
         if (diffDays > 0) {
@@ -147,8 +153,8 @@ export default function TripSettings({ tripId }: TripSettingsProps) {
               selectedPresetName: "Săn mây đồi Robin Đà Lạt",
               tripName: t.name || "Oanh tạc Đà Lạt 3N2Đ cùng Hội bạn thân 🌲",
               destination: t.destination || "Thành phố Đà Lạt, Tỉnh Lâm Đồng, Việt Nam",
-              startDate: t.start_date || "15/10/2026",
-              endDate: t.end_date || "18/10/2026",
+              startDate: formatDateToDisplay(t.start_date) || "15/10/2026",
+              endDate: formatDateToDisplay(t.end_date) || "18/10/2026",
               description:
                 description ||
                 "Mục tiêu chuyến đi: Ăn sập chợ đêm Đà Lạt, săn mây đồi Robin lúc bình minh, ghé quán cà phê thung lũng ngắm hoàng hôn và chụp 1000 tấm ảnh sống ảo cùng hội bạn thân!",
@@ -211,8 +217,8 @@ export default function TripSettings({ tripId }: TripSettingsProps) {
         body: JSON.stringify({
           name: tripName.trim(),
           destination: destination.trim(),
-          start_date: startDate,
-          end_date: endDate,
+          start_date: normalizeDateToISO(startDate) || startDate,
+          end_date: normalizeDateToISO(endDate) || endDate,
           cover_image_url: coverImage,
           description: description.trim(),
           is_private: isPrivate,
@@ -259,8 +265,15 @@ export default function TripSettings({ tripId }: TripSettingsProps) {
   const handleDeleteTrip = async () => {
     setIsDeleting(true);
     try {
+      const finalReason =
+        deleteReason === "Lý do khác" && customReason.trim()
+          ? customReason.trim()
+          : deleteReason;
+
       const res = await fetch(`/api/trips/${tripId}`, {
         method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reason: finalReason }),
       });
 
       if (res.ok) {
@@ -816,8 +829,17 @@ export default function TripSettings({ tripId }: TripSettingsProps) {
                 disabled={isSaving}
                 className="inline-flex items-center gap-2 px-6 py-2.5 rounded-xl text-xs sm:text-sm font-bold text-white bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-500 hover:opacity-95 shadow-md shadow-indigo-200 transition-all cursor-pointer disabled:opacity-50"
               >
-                <Save className="w-4 h-4" />
-                <span>{isSaving ? "Đang lưu..." : "Lưu thay đổi"}</span>
+                {isSaving ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spinner" />
+                    <span>Đang lưu...</span>
+                  </>
+                ) : (
+                  <>
+                    <Save className="w-4 h-4" />
+                    <span>Lưu thay đổi</span>
+                  </>
+                )}
               </button>
             </div>
           </div>
@@ -846,6 +868,8 @@ export default function TripSettings({ tripId }: TripSettingsProps) {
             type="button"
             onClick={() => {
               setDeleteConfirmInput("");
+              setDeleteReason("Kế hoạch bị hủy / các thành viên bận");
+              setCustomReason("");
               setShowDeleteModal(true);
             }}
             className="inline-flex items-center gap-2 px-5 py-3 rounded-2xl bg-rose-600 hover:bg-rose-700 text-white text-xs sm:text-sm font-bold shadow-md shadow-rose-600/20 transition-all cursor-pointer shrink-0 self-end md:self-center"
@@ -934,14 +958,49 @@ export default function TripSettings({ tripId }: TripSettingsProps) {
               </div>
             </div>
 
+            {/* Reason selector */}
+            <div className="space-y-1.5 text-xs">
+              <label className="block font-semibold text-slate-700">
+                Lý do xóa chuyến đi <span className="text-rose-500">*</span>
+              </label>
+              <select
+                value={deleteReason}
+                onChange={(e) => setDeleteReason(e.target.value)}
+                className="w-full bg-[#f8f9fc] border border-slate-200/90 rounded-xl px-3 py-2.5 text-xs font-medium text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-rose-500/20 focus:border-rose-500 cursor-pointer"
+              >
+                <option value="Kế hoạch bị hủy / các thành viên bận">Kế hoạch bị hủy / các thành viên bận</option>
+                <option value="Tạo chuyến đi nhầm / chuyến đi thử nghiệm">Tạo chuyến đi nhầm / chuyến đi thử nghiệm</option>
+                <option value="Đổi kế hoạch sang địa điểm hoặc thời gian khác">Đổi kế hoạch sang địa điểm hoặc thời gian khác</option>
+                <option value="Trùng lặp với chuyến đi khác trong nhóm">Trùng lặp với chuyến đi khác trong nhóm</option>
+                <option value="Lý do khác">Lý do khác...</option>
+              </select>
+
+              {deleteReason === "Lý do khác" && (
+                <input
+                  type="text"
+                  value={customReason}
+                  onChange={(e) => setCustomReason(e.target.value)}
+                  placeholder="Nhập lý do cụ thể của bạn..."
+                  className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-rose-500/20"
+                  autoFocus
+                />
+              )}
+            </div>
+
             <div className="p-3 bg-slate-50 rounded-xl border border-slate-200/80 text-xs">
               <span className="text-slate-500 block mb-1">
-                Để xác nhận, vui lòng nhập chữ: <strong className="text-slate-800">XÓA</strong>
+                Để xác nhận, vui lòng nhập: <strong className="text-slate-800">XÓA</strong> hoặc <strong className="text-slate-800">XOA</strong>
               </span>
               <input
                 type="text"
                 value={deleteConfirmInput}
                 onChange={(e) => setDeleteConfirmInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && isDeleteConfirmed && !isDeleting) {
+                    handleDeleteTrip();
+                  }
+                }}
+                autoFocus
                 placeholder="Nhập XÓA để xác nhận"
                 className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-rose-500/20"
               />
@@ -951,7 +1010,7 @@ export default function TripSettings({ tripId }: TripSettingsProps) {
               <button
                 type="button"
                 onClick={() => setShowDeleteModal(false)}
-                className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100"
+                className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 cursor-pointer"
               >
                 Hủy bỏ
               </button>
@@ -959,10 +1018,17 @@ export default function TripSettings({ tripId }: TripSettingsProps) {
               <button
                 type="button"
                 onClick={handleDeleteTrip}
-                disabled={deleteConfirmInput.trim().toUpperCase() !== "XÓA" || isDeleting}
-                className="px-5 py-2.5 rounded-xl text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 disabled:opacity-40 transition-all cursor-pointer shadow-sm"
+                disabled={!isDeleteConfirmed || isDeleting}
+                className="inline-flex items-center gap-1.5 px-5 py-2.5 rounded-xl text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 disabled:opacity-40 disabled:cursor-not-allowed transition-all cursor-pointer shadow-sm"
               >
-                {isDeleting ? "Đang xóa..." : "Xác nhận xóa"}
+                {isDeleting ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spinner" />
+                    <span>Đang xóa...</span>
+                  </>
+                ) : (
+                  <span>Xác nhận xóa</span>
+                )}
               </button>
             </div>
           </div>

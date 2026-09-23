@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useRef, useMemo } from "react";
+import { normalizeDateToISO } from "@/lib/date-utils";
 import {
   Plane,
   X,
@@ -13,6 +14,7 @@ import {
   ArrowRight,
   Check,
   Compass,
+  Loader2,
 } from "lucide-react";
 
 interface CreateTripModalProps {
@@ -73,19 +75,11 @@ export default function CreateTripModal({
   // Calculate duration string (e.g. "3 ngày 2 đêm")
   const durationText = useMemo(() => {
     try {
-      const partsStart = startDate.split("/");
-      const partsEnd = endDate.split("/");
-      if (partsStart.length === 3 && partsEnd.length === 3) {
-        const d1 = new Date(
-          parseInt(partsStart[2]),
-          parseInt(partsStart[1]) - 1,
-          parseInt(partsStart[0])
-        );
-        const d2 = new Date(
-          parseInt(partsEnd[2]),
-          parseInt(partsEnd[1]) - 1,
-          parseInt(partsEnd[0])
-        );
+      const s = normalizeDateToISO(startDate);
+      const e = normalizeDateToISO(endDate);
+      if (s && e) {
+        const d1 = new Date(s);
+        const d2 = new Date(e);
         const diffTime = Math.abs(d2.getTime() - d1.getTime());
         const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
         if (diffDays > 0) {
@@ -131,8 +125,8 @@ export default function CreateTripModal({
         body: JSON.stringify({
           name: tripName.trim(),
           destination: destination.trim(),
-          start_date: startDate,
-          end_date: endDate,
+          start_date: normalizeDateToISO(startDate) || startDate,
+          end_date: normalizeDateToISO(endDate) || endDate,
           cover_image_url: coverImage,
           description: description.trim(),
           is_private: isPrivate,
@@ -493,8 +487,17 @@ export default function CreateTripModal({
               disabled={isSubmitting}
               className="inline-flex items-center gap-1.5 px-5 py-2.5 rounded-xl text-xs sm:text-sm font-bold text-white bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-500 hover:opacity-95 shadow-md shadow-indigo-200 transition-all cursor-pointer disabled:opacity-50"
             >
-              <span>{isSubmitting ? "Đang tạo..." : "Tạo chuyến đi & Lên lịch trình"}</span>
-              <ArrowRight className="w-4 h-4" />
+              {isSubmitting ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spinner" />
+                  <span>Đang tạo...</span>
+                </>
+              ) : (
+                <>
+                  <span>Tạo chuyến đi & Lên lịch trình</span>
+                  <ArrowRight className="w-4 h-4" />
+                </>
+              )}
             </button>
           </div>
         </div>

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { normalizeDateToISO } from '@/lib/date-utils'
 import type { TablesUpdate } from '@/types/database'
 
 interface RouteContext {
@@ -88,8 +89,8 @@ export async function PATCH(request: Request, context: RouteContext) {
 
     if (name !== undefined) updates.name = name.trim()
     if (destination !== undefined) updates.destination = destination.trim()
-    if (start_date !== undefined) updates.start_date = start_date
-    if (end_date !== undefined) updates.end_date = end_date
+    if (start_date !== undefined) updates.start_date = normalizeDateToISO(start_date)
+    if (end_date !== undefined) updates.end_date = normalizeDateToISO(end_date)
     if (cover_image_url !== undefined) updates.cover_image_url = cover_image_url
 
     const { data: updatedTrip, error } = await supabase
@@ -125,11 +126,32 @@ export async function DELETE(request: Request, context: RouteContext) {
       return NextResponse.json({ error: 'Thiếu ID chuyến đi' }, { status: 400 })
     }
 
+    const body = await request.json().catch(() => ({}))
+    const { reason } = body || {}
+
     const supabase = await createClient()
 
-    // 1. Xóa các bản ghi liên quan trong trip_members và trip_invites
-    await supabase.from('trip_members').delete().eq('trip_id', tripId)
-    await supabase.from('trip_invites').delete().eq('trip_id', tripId)
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+
+    if (!user) {
+      return NextResponse.json({ error: 'Chưa đăng nhập' }, { status: 401 })
+    }
+
+    if (reason) {
+      console.log(`[Trip Deleted] Trip ID ${tripId} deleted by user ${user.id}. Reason: "${reason}"`)
+    }
+
+    // 1. Xóa các bản ghi liên quan để tránh lỗi khóa ngoại (Foreign Key)
+    await Promise.allSettled([
+      supabase.from('trip_members').delete().eq('trip_id', tripId),
+      supabase.from('trip_invites').delete().eq('trip_id', tripId),
+      supabase.from('itinerary_days').delete().eq('trip_id', tripId),
+      supabase.from('expenses').delete().eq('trip_id', tripId),
+      supabase.from('chat_messages').delete().eq('trip_id', tripId),
+      supabase.from('expense_settlements').delete().eq('trip_id', tripId),
+    ])
 
     // 2. Xóa chuyến đi khỏi bảng trips
     const { error: deleteTripError } = await supabase

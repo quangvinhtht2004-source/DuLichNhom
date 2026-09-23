@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { normalizeDateToISO } from '@/lib/date-utils'
 
 export async function GET() {
   const supabase = await createClient()
@@ -55,8 +56,8 @@ export async function POST(request: Request) {
     .insert({
       name: body.name.trim(),
       destination: body.destination?.trim() || null,
-      start_date: body.start_date || null,
-      end_date: body.end_date || null,
+      start_date: normalizeDateToISO(body.start_date),
+      end_date: normalizeDateToISO(body.end_date),
       cover_image_url: body.cover_image_url || null,
       created_by: user.id,
     })
