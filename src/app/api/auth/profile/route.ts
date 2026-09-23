@@ -72,7 +72,7 @@ export async function PATCH(request: Request) {
     return NextResponse.json({ error: 'Dữ liệu JSON không hợp lệ' }, { status: 400 })
   }
 
-  const { full_name, phone } = body || {}
+  const { full_name, phone, avatar_url } = body || {}
 
   const supabase = await createClient()
 
@@ -87,15 +87,16 @@ export async function PATCH(request: Request) {
   const updates: TablesUpdate<'profiles'> = {}
   if (full_name !== undefined) updates.full_name = full_name
   if (phone !== undefined) updates.phone = phone
+  if (avatar_url !== undefined) updates.avatar_url = avatar_url
+  updates.updated_at = new Date().toISOString()
 
-  if (Object.keys(updates).length === 0) {
+  if (Object.keys(updates).length <= 1 && updates.updated_at) {
     return NextResponse.json({ error: 'Không có dữ liệu để cập nhật' }, { status: 400 })
   }
 
   const { data, error } = await supabase
     .from('profiles')
-    .update(updates)
-    .eq('id', user.id)
+    .upsert({ id: user.id, ...updates }, { onConflict: 'id' })
     .select('id, full_name, avatar_url, phone, created_at, updated_at')
     .single()
 

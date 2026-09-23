@@ -58,3 +58,28 @@ export async function POST(request: Request) {
 
   return NextResponse.json({ profile: data })
 }
+
+export async function DELETE() {
+  const supabase = await createClient()
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
+  if (!user) {
+    return NextResponse.json({ error: 'Chưa đăng nhập' }, { status: 401 })
+  }
+
+  const { data, error } = await supabase
+    .from('profiles')
+    .update({ avatar_url: null, updated_at: new Date().toISOString() })
+    .eq('id', user.id)
+    .select('id, full_name, avatar_url, phone, created_at, updated_at')
+    .single()
+
+  if (error) {
+    return NextResponse.json({ error: error.message }, { status: 400 })
+  }
+
+  return NextResponse.json({ profile: data })
+}

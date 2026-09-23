@@ -32,10 +32,7 @@ export default async function ProfilePage() {
         user.email?.split("@")[0] ||
         "",
       avatar_url:
-        data?.avatar_url ||
-        user.user_metadata?.avatar_url ||
-        user.user_metadata?.picture ||
-        null,
+        data ? data.avatar_url : (user.user_metadata?.avatar_url || user.user_metadata?.picture || null),
       phone: data?.phone || user.phone || "",
       email: user.email,
       created_at: data?.created_at || user.created_at,

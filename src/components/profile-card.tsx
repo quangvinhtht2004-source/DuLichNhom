@@ -25,6 +25,7 @@ import {
   X,
   Compass,
   Plus,
+  Loader2,
 } from "lucide-react";
 
 interface ProfileCardProps {
@@ -70,12 +71,14 @@ export default function ProfileCard({ initialProfile: serverProfile }: ProfileCa
   });
 
   const [avatarSrc, setAvatarSrc] = useState<string | null>(() => {
-    if (serverProfile?.avatar_url) return serverProfile.avatar_url;
+    if (serverProfile !== undefined && serverProfile !== null) {
+      return serverProfile.avatar_url || null;
+    }
     if (typeof window !== "undefined") {
       const saved = sessionStorage.getItem("user_avatar_url");
       if (saved) return saved;
     }
-    return "https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?q=80&w=400&auto=format&fit=crop";
+    return null;
   });
 
   const [bio, setBio] = useState<string>(
@@ -89,11 +92,11 @@ export default function ProfileCard({ initialProfile: serverProfile }: ProfileCa
     bio: string;
     avatarSrc: string | null;
   }>({
-    fullName: "Nguyễn Hoàng Nam",
+    fullName: serverProfile?.full_name || "Nguyễn Hoàng Nam",
     nickname: "Nam Balo 🎒",
-    phone: "0912 345 678",
+    phone: serverProfile?.phone || "0912 345 678",
     bio: "Đam mê trekking săn mây, thích chụp ảnh flycam và luôn đúng giờ trong mọi lịch trình nhóm. Phương châm: 'Đi là phải hết mình!' ⛰️📸",
-    avatarSrc: "https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?q=80&w=400&auto=format&fit=crop",
+    avatarSrc: serverProfile?.avatar_url || null,
   });
 
   // Action states
@@ -131,24 +134,28 @@ export default function ProfileCard({ initialProfile: serverProfile }: ProfileCa
             const loadedName = p.full_name || fullName;
             const loadedPhone = p.phone || phone;
             const loadedEmail = p.email || email;
-            const loadedAvatar = p.avatar_url || avatarSrc;
+            const loadedAvatar = p.avatar_url ?? null;
 
             setFullName(loadedName);
             setPhone(loadedPhone);
             setEmail(loadedEmail);
-            if (loadedAvatar) setAvatarSrc(loadedAvatar);
+            setAvatarSrc(loadedAvatar);
 
             setInitialData({
               fullName: loadedName,
               nickname: "Nam Balo 🎒",
               phone: loadedPhone,
               bio,
-              avatarSrc: loadedAvatar || avatarSrc,
+              avatarSrc: loadedAvatar,
             });
 
             if (typeof window !== "undefined") {
               sessionStorage.setItem("user_full_name", loadedName);
-              if (loadedAvatar) sessionStorage.setItem("user_avatar_url", loadedAvatar);
+              if (loadedAvatar) {
+                sessionStorage.setItem("user_avatar_url", loadedAvatar);
+              } else {
+                sessionStorage.removeItem("user_avatar_url");
+              }
               if (loadedEmail) sessionStorage.setItem("user_email", loadedEmail);
             }
           }
@@ -171,19 +178,29 @@ export default function ProfileCard({ initialProfile: serverProfile }: ProfileCa
         body: JSON.stringify({
           full_name: fullName,
           phone: phone,
+          avatar_url: avatarSrc,
         }),
       });
 
       if (res.ok) {
+        const data = await res.json().catch(() => ({}));
+        const savedAvatar = data?.profile?.avatar_url !== undefined ? data.profile.avatar_url : avatarSrc;
+
+        setAvatarSrc(savedAvatar);
         if (typeof window !== "undefined") {
           sessionStorage.setItem("user_full_name", fullName);
+          if (savedAvatar) {
+            sessionStorage.setItem("user_avatar_url", savedAvatar);
+          } else {
+            sessionStorage.removeItem("user_avatar_url");
+          }
         }
         setInitialData({
           fullName,
           nickname,
           phone,
           bio,
-          avatarSrc,
+          avatarSrc: savedAvatar,
         });
         triggerToast("Đã lưu thông tin hồ sơ cá nhân thành công!");
       } else {
@@ -231,9 +248,11 @@ export default function ProfileCard({ initialProfile: serverProfile }: ProfileCa
       if (res.ok) {
         const data = await res.json();
         if (data?.profile?.avatar_url) {
-          setAvatarSrc(data.profile.avatar_url);
+          const newUrl = data.profile.avatar_url;
+          setAvatarSrc(newUrl);
+          setInitialData((prev) => ({ ...prev, avatarSrc: newUrl }));
           if (typeof window !== "undefined") {
-            sessionStorage.setItem("user_avatar_url", data.profile.avatar_url);
+            sessionStorage.setItem("user_avatar_url", newUrl);
           }
           triggerToast("Tải ảnh đại diện mới thành công!");
         }
@@ -263,7 +282,7 @@ export default function ProfileCard({ initialProfile: serverProfile }: ProfileCa
     if (typeof window !== "undefined") {
       sessionStorage.removeItem("user_avatar_url");
     }
-    triggerToast("Đã xóa ảnh đại diện.");
+    triggerToast("Đã xóa ảnh. Hãy nhấn 'Lưu thay đổi' để hoàn tất!");
   };
 
   // Logout
@@ -503,7 +522,8 @@ export default function ProfileCard({ initialProfile: serverProfile }: ProfileCa
               <button
                 type="button"
                 onClick={handleRemoveAvatar}
-                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-rose-600 hover:bg-rose-50 text-xs font-semibold transition-colors cursor-pointer"
+                disabled={!avatarSrc}
+                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-rose-600 hover:bg-rose-50 text-xs font-semibold transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 <Trash2 className="w-3.5 h-3.5" />
                 <span>Xóa ảnh</span>
@@ -741,8 +761,17 @@ export default function ProfileCard({ initialProfile: serverProfile }: ProfileCa
             disabled={isSaving}
             className="inline-flex items-center gap-2 px-6 py-2.5 rounded-xl text-xs sm:text-sm font-bold text-white bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-500 hover:opacity-95 shadow-md shadow-indigo-600/25 transition-all cursor-pointer disabled:opacity-50"
           >
-            <Save className="w-4 h-4" />
-            <span>{isSaving ? "Đang lưu..." : "Lưu thay đổi"}</span>
+            {isSaving ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spinner" />
+                <span>Đang lưu...</span>
+              </>
+            ) : (
+              <>
+                <Save className="w-4 h-4" />
+                <span>Lưu thay đổi</span>
+              </>
+            )}
           </button>
         </div>
       </main>
