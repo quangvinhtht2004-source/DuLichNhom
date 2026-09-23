@@ -32,6 +32,15 @@ export async function POST(request: Request) {
   })
 
   if (error) {
+    if (error.message?.toLowerCase().includes('rate limit')) {
+      return NextResponse.json(
+        {
+          error:
+            'Đã vượt quá giới hạn gửi email của Supabase (tối đa 3-4 email/giờ với SMTP mặc định). Vui lòng thử đăng nhập bằng Google hoặc tắt "Confirm email" trong Supabase Dashboard.',
+        },
+        { status: 429 }
+      )
+    }
     return NextResponse.json({ error: error.message }, { status: error.status ?? 400 })
   }
 

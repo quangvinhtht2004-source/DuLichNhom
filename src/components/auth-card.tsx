@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import {
   Compass,
@@ -47,6 +47,23 @@ export default function AuthCard() {
     type: "success" | "error";
     text: string;
   } | null>(null);
+
+  // Check URL query parameters for OAuth error
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      const err = params.get("error");
+      if (err) {
+        setStatusMessage({
+          type: "error",
+          text:
+            err === "auth_error"
+              ? "Đăng nhập Google thất bại hoặc bị huỷ. Vui lòng thử lại!"
+              : decodeURIComponent(err),
+        });
+      }
+    }
+  }, []);
 
   // Handle Login Submit
   const handleLoginSubmit = async (e: React.FormEvent) => {
