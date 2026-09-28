@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useRef, useMemo } from "react";
+import { useRouter } from "next/navigation";
 import { normalizeDateToISO } from "@/lib/date-utils";
 import {
   Plane,
@@ -28,6 +29,7 @@ export default function CreateTripModal({
   onClose,
   onTripCreated,
 }: CreateTripModalProps) {
+  const router = useRouter();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Presets matching mockup
@@ -138,6 +140,7 @@ export default function CreateTripModal({
       if (res.ok && data?.trip) {
         onTripCreated(data.trip);
         onClose();
+        router.push(`/trips/${data.trip.id}`);
       } else {
         setErrorMsg(data?.error || "Không thể tạo chuyến đi");
       }

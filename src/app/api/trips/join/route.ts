@@ -21,12 +21,13 @@ export async function POST(request: Request) {
   }
 
   const admin = createAdminClient()
+  const cleanCode = code.trim()
 
   const { data: invite, error: inviteError } = await admin
     .from('trip_invites')
     .select('*')
-    .eq('code', code.trim())
-    .single()
+    .ilike('code', cleanCode)
+    .maybeSingle()
 
   if (inviteError || !invite) {
     return NextResponse.json({ error: 'Mã mời không hợp lệ' }, { status: 404 })

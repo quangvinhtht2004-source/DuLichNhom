@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   X,
   UserPlus,
@@ -13,17 +13,20 @@ import {
   Ticket,
   Mail,
   Sparkles,
+  Loader2,
 } from "lucide-react";
 
 interface InviteFriendsModalProps {
   isOpen: boolean;
   onClose: () => void;
+  tripId?: string;
   tripName?: string;
 }
 
 export default function InviteFriendsModal({
   isOpen,
   onClose,
+  tripId,
   tripName = "Oanh tạc Đà Lạt 3N2Đ 🌲",
 }: InviteFriendsModalProps) {
   const [role, setRole] = useState<string>("Xem & Cùng đóng góp ý kiến");
@@ -33,8 +36,51 @@ export default function InviteFriendsModal({
   const [emailInput, setEmailInput] = useState<string>("");
   const [inviteSentToast, setInviteSentToast] = useState<string | null>(null);
 
-  const inviteLink = "https://trippo.app/join/dalat-2026-xyz";
-  const pinCode = "DL2026";
+  const [pinCode, setPinCode] = useState<string>("DL2026");
+  const [inviteLink, setInviteLink] = useState<string>("https://trippo.app/join/dalat-2026-xyz");
+  const [isLoadingCode, setIsLoadingCode] = useState<boolean>(false);
+
+  useEffect(() => {
+    if (!isOpen || !tripId) return;
+
+    const fetchOrCreateInvite = async () => {
+      try {
+        setIsLoadingCode(true);
+        const res = await fetch(`/api/trips/${tripId}/invites`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data.invites && data.invites.length > 0) {
+            const code = data.invites[0].code.toUpperCase();
+            setPinCode(code);
+            const origin = typeof window !== "undefined" ? window.location.origin : "";
+            setInviteLink(`${origin}/dashboard?join=${code}`);
+            return;
+          }
+        }
+        // If none exists, create a new invite
+        const createRes = await fetch(`/api/trips/${tripId}/invites`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({}),
+        });
+        if (createRes.ok) {
+          const createData = await createRes.json();
+          if (createData.invite?.code) {
+            const code = createData.invite.code.toUpperCase();
+            setPinCode(code);
+            const origin = typeof window !== "undefined" ? window.location.origin : "";
+            setInviteLink(`${origin}/dashboard?join=${code}`);
+          }
+        }
+      } catch (err) {
+        console.error("Lỗi lấy mã mời:", err);
+      } finally {
+        setIsLoadingCode(false);
+      }
+    };
+
+    fetchOrCreateInvite();
+  }, [isOpen, tripId]);
 
   const closeFriends = [
     { name: "Minh Anh", email: "minhanh@gmail.com", avatar: "MA" },

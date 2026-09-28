@@ -31,7 +31,27 @@ import {
   User,
   ExternalLink,
   Loader2,
+  Crown,
+  ShieldCheck,
+  UserX,
+  UserMinus,
+  Mail,
 } from "lucide-react";
+import InviteFriendsModal from "./invite-friends-modal";
+
+interface MemberItem {
+  id: string;
+  user_id: string;
+  role: "owner" | "member";
+  status: "pending" | "accepted" | "declined" | "removed";
+  invited_by: string | null;
+  joined_at: string | null;
+  created_at: string;
+  profiles?: {
+    full_name: string | null;
+    avatar_url: string | null;
+  } | null;
+}
 
 interface TripSettingsProps {
   tripId: string;
@@ -108,6 +128,18 @@ export default function TripSettings({ tripId }: TripSettingsProps) {
   const [customReason, setCustomReason] = useState<string>("");
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
+  // Members & Roles States
+  const [members, setMembers] = useState<MemberItem[]>([]);
+  const [isLoadingMembers, setIsLoadingMembers] = useState<boolean>(true);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [currentUserRole, setCurrentUserRole] = useState<"owner" | "member">("member");
+  const [showInviteModal, setShowInviteModal] = useState<boolean>(false);
+  const [memberToDelete, setMemberToDelete] = useState<MemberItem | null>(null);
+  const [isRemovingMember, setIsRemovingMember] = useState<boolean>(false);
+  const [showLeaveModal, setShowLeaveModal] = useState<boolean>(false);
+  const [isLeavingTrip, setIsLeavingTrip] = useState<boolean>(false);
+  const [changingRoleId, setChangingRoleId] = useState<string | null>(null);
+
   // Check if delete input matches "xoa" regardless of accent style (XÓA, XOÁ, xoa, XOA)
   const isDeleteConfirmed = useMemo(() => {
     const raw = deleteConfirmInput.trim().toLowerCase();
@@ -177,6 +209,136 @@ export default function TripSettings({ tripId }: TripSettingsProps) {
 
     fetchTripData();
   }, [tripId]);
+
+  // Fetch Member List from Supabase
+  const fetchMembers = async () => {
+    try {
+      setIsLoadingMembers(true);
+      const res = await fetch(`/api/trips/${tripId}/members`);
+      if (res.ok) {
+        const json = await res.json();
+        if (json?.members && Array.isArray(json.members)) {
+          setMembers(json.members);
+        }
+      }
+    } catch (err) {
+      console.error("Error fetching members:", err);
+    } finally {
+      setIsLoadingMembers(false);
+    }
+  };
+
+  // Fetch current user and initialize members
+  useEffect(() => {
+    const fetchUserProfile = async () => {
+      try {
+        const res = await fetch("/api/auth/profile");
+        if (res.ok) {
+          const json = await res.json();
+          if (json?.profile?.id) {
+            setCurrentUserId(json.profile.id);
+          }
+          if (json?.profile?.full_name) {
+            setUserName(json.profile.full_name);
+          }
+          if (json?.profile?.avatar_url) {
+            setUserAvatar(json.profile.avatar_url);
+          }
+        }
+      } catch (err) {
+        console.error("Error fetching user profile:", err);
+      }
+    };
+
+    fetchUserProfile();
+    fetchMembers();
+  }, [tripId]);
+
+  // Sync current user role
+  useEffect(() => {
+    if (currentUserId && members.length > 0) {
+      const myMembership = members.find((m) => m.user_id === currentUserId);
+      if (myMembership) {
+        setCurrentUserRole(myMembership.role);
+      }
+    }
+  }, [currentUserId, members]);
+
+  // Change Member Role (Owner <-> Member)
+  const handleChangeRole = async (targetUserId: string, newRole: "owner" | "member") => {
+    try {
+      setChangingRoleId(targetUserId);
+      const res = await fetch(`/api/trips/${tripId}/members/${targetUserId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ role: newRole }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        triggerToast(data?.error || "Không thể thay đổi vai trò");
+        return;
+      }
+      setMembers((prev) =>
+        prev.map((m) => (m.user_id === targetUserId ? { ...m, role: newRole } : m))
+      );
+      triggerToast(
+        newRole === "owner"
+          ? "Đã bổ nhiệm thành viên làm Trưởng nhóm thành công!"
+          : "Đã chuyển vai trò về Thành viên thành công!"
+      );
+    } catch {
+      triggerToast("Lỗi kết nối khi thay đổi vai trò");
+    } finally {
+      setChangingRoleId(null);
+    }
+  };
+
+  // Kick member from trip (Leader only)
+  const handleKickMember = async () => {
+    if (!memberToDelete) return;
+    try {
+      setIsRemovingMember(true);
+      const res = await fetch(`/api/trips/${tripId}/members/${memberToDelete.user_id}`, {
+        method: "DELETE",
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        triggerToast(data?.error || "Không thể xóa thành viên khỏi nhóm");
+        return;
+      }
+      setMembers((prev) => prev.filter((m) => m.user_id !== memberToDelete.user_id));
+      triggerToast("Đã xóa thành viên khỏi chuyến đi thành công!");
+      setMemberToDelete(null);
+    } catch {
+      triggerToast("Lỗi máy chủ khi xóa thành viên");
+    } finally {
+      setIsRemovingMember(false);
+    }
+  };
+
+  // Leave trip (Member or non-sole leader)
+  const handleLeaveTrip = async () => {
+    try {
+      setIsLeavingTrip(true);
+      const res = await fetch(`/api/trips/${tripId}/members/me`, {
+        method: "DELETE",
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        triggerToast(data?.error || "Không thể rời khỏi chuyến đi");
+        return;
+      }
+      triggerToast("Bạn đã rời khỏi chuyến đi thành công!");
+      setShowLeaveModal(false);
+      setTimeout(() => {
+        router.push("/dashboard");
+      }, 1200);
+    } catch {
+      triggerToast("Lỗi máy chủ khi rời chuyến đi");
+    } finally {
+      setIsLeavingTrip(false);
+    }
+  };
 
   // Trigger Toast Notification
   const triggerToast = (msg: string) => {
@@ -441,9 +603,24 @@ export default function TripSettings({ tripId }: TripSettingsProps) {
               <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
                 Cài đặt chuyến đi
               </h1>
-              <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold bg-indigo-50 text-indigo-700 border border-indigo-100">
-                <User className="w-3 h-3" />
-                <span>Bạn là Trưởng nhóm</span>
+              <span
+                className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold ${
+                  currentUserRole === "owner"
+                    ? "bg-indigo-50 text-indigo-700 border border-indigo-100"
+                    : "bg-sky-50 text-sky-700 border border-sky-100"
+                }`}
+              >
+                {currentUserRole === "owner" ? (
+                  <>
+                    <Crown className="w-3.5 h-3.5 text-indigo-600" />
+                    <span>Bạn là Trưởng nhóm</span>
+                  </>
+                ) : (
+                  <>
+                    <User className="w-3.5 h-3.5 text-sky-600" />
+                    <span>Bạn là Thành viên</span>
+                  </>
+                )}
               </span>
             </div>
             <p className="text-xs sm:text-sm text-slate-500 mt-1 max-w-xl leading-relaxed">
@@ -452,11 +629,11 @@ export default function TripSettings({ tripId }: TripSettingsProps) {
           </div>
 
           <Link
-            href="/dashboard"
+            href={`/trips/${tripId}`}
             className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold bg-indigo-50/80 hover:bg-indigo-100 text-indigo-700 transition-colors cursor-pointer self-start sm:self-auto shrink-0 shadow-2xs"
           >
             <ArrowLeft className="w-3.5 h-3.5" />
-            <span>Về trang hành trình</span>
+            <span>Về trang lịch trình</span>
           </Link>
         </div>
 
@@ -485,7 +662,7 @@ export default function TripSettings({ tripId }: TripSettingsProps) {
             <Users className="w-3.5 h-3.5" />
             <span>Thành viên & Quyền hạn</span>
             <span className="w-5 h-5 rounded-full bg-indigo-100 text-indigo-700 text-[10px] flex items-center justify-center font-bold">
-              5
+              {members.length}
             </span>
           </button>
 
@@ -514,8 +691,11 @@ export default function TripSettings({ tripId }: TripSettingsProps) {
           </button>
         </div>
 
-        {/* 4. CARD 1: THÔNG TIN HÀNH TRÌNH (TRIP DETAILS FORM) */}
-        <div className="bg-white rounded-3xl p-6 sm:p-7 border border-slate-200/80 shadow-2xs space-y-6">
+        {/* ===================== TAB 1: THÔNG TIN CHUNG ===================== */}
+        {activeTab === "general" && (
+          <div className="space-y-6">
+            {/* 4. CARD 1: THÔNG TIN HÀNH TRÌNH (TRIP DETAILS FORM) */}
+            <div className="bg-white rounded-3xl p-6 sm:p-7 border border-slate-200/80 shadow-2xs space-y-6">
           {/* Section Header */}
           <div className="flex items-center justify-between pb-3 border-b border-slate-100">
             <div className="flex items-center gap-2.5">
@@ -913,6 +1093,295 @@ export default function TripSettings({ tripId }: TripSettingsProps) {
             <span>→</span>
           </button>
         </div>
+      </div>
+    )}
+
+        {/* ===================== TAB 2: THÀNH VIÊN & QUYỀN HẠN ===================== */}
+        {activeTab === "members" && (
+          <div className="space-y-6 animate-fadeIn">
+            {/* 1. MEMBERS LIST CARD */}
+            <div className="bg-white rounded-3xl p-6 sm:p-7 border border-slate-200/80 shadow-2xs space-y-6">
+              {/* Card Header */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-100">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0 shadow-xs">
+                    <Users className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-base sm:text-lg font-bold text-slate-900">
+                      Danh sách thành viên ({members.length})
+                    </h3>
+                    <p className="text-xs text-slate-400">
+                      Quản lý vai trò Trưởng nhóm / Thành viên và người tham gia chuyến đi
+                    </p>
+                  </div>
+                </div>
+
+                {/* Invite Friends Button */}
+                <button
+                  type="button"
+                  onClick={() => setShowInviteModal(true)}
+                  className="inline-flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs font-bold text-white bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-500 hover:opacity-95 shadow-md shadow-indigo-100 transition-all cursor-pointer shrink-0 self-start sm:self-auto"
+                >
+                  <Plus className="w-4 h-4 stroke-[2.5]" />
+                  <span>Mời bạn bè vào chuyến</span>
+                </button>
+              </div>
+
+              {/* Members Status Summary Bar */}
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                <div className="p-3.5 rounded-2xl bg-[#f8fafc] border border-slate-100">
+                  <span className="text-[11px] font-medium text-slate-400 block">Tổng số thành viên</span>
+                  <span className="text-lg font-extrabold text-slate-800">{members.length}</span>
+                </div>
+                <div className="p-3.5 rounded-2xl bg-emerald-50/60 border border-emerald-100/80">
+                  <span className="text-[11px] font-medium text-emerald-600 block">Đã tham gia</span>
+                  <span className="text-lg font-extrabold text-emerald-700">
+                    {members.filter((m) => m.status === "accepted").length}
+                  </span>
+                </div>
+                <div className="p-3.5 rounded-2xl bg-amber-50/60 border border-amber-100/80 col-span-2 sm:col-span-1">
+                  <span className="text-[11px] font-medium text-amber-600 block">Chờ xác nhận</span>
+                  <span className="text-lg font-extrabold text-amber-700">
+                    {members.filter((m) => m.status === "pending").length}
+                  </span>
+                </div>
+              </div>
+
+              {/* Member Items List */}
+              <div className="space-y-3 pt-1">
+                {isLoadingMembers ? (
+                  <div className="space-y-3 py-6">
+                    {[1, 2, 3].map((i) => (
+                      <div
+                        key={i}
+                        className="p-4 rounded-2xl border border-slate-100 bg-slate-50/50 flex items-center justify-between animate-pulse"
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 rounded-full bg-slate-200" />
+                          <div className="space-y-1.5">
+                            <div className="w-32 h-3.5 rounded bg-slate-200" />
+                            <div className="w-20 h-2.5 rounded bg-slate-200" />
+                          </div>
+                        </div>
+                        <div className="w-24 h-8 rounded-xl bg-slate-200" />
+                      </div>
+                    ))}
+                  </div>
+                ) : members.length === 0 ? (
+                  <div className="text-center py-10 space-y-3">
+                    <div className="w-12 h-12 rounded-2xl bg-slate-100 text-slate-400 flex items-center justify-center mx-auto">
+                      <Users className="w-6 h-6" />
+                    </div>
+                    <p className="text-xs text-slate-500 font-medium">Chưa có thành viên nào trong danh sách</p>
+                    <button
+                      type="button"
+                      onClick={() => setShowInviteModal(true)}
+                      className="inline-flex items-center gap-1.5 text-xs font-bold text-indigo-600 hover:text-indigo-700 cursor-pointer"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>Mời thành viên đầu tiên</span>
+                    </button>
+                  </div>
+                ) : (
+                  members.map((m) => {
+                    const isMe = m.user_id === currentUserId;
+                    const memberName = m.profiles?.full_name || (isMe ? userName : "Thành viên nhóm");
+                    const memberAvatar = m.profiles?.avatar_url || (isMe ? userAvatar : null);
+                    const isOwner = m.role === "owner";
+                    const isChanging = changingRoleId === m.user_id;
+
+                    return (
+                      <div
+                        key={m.id}
+                        className="p-4 rounded-2xl border border-slate-100 hover:border-slate-200 bg-[#fbfcfe] hover:bg-white flex flex-col sm:flex-row sm:items-center justify-between gap-4 transition-all shadow-2xs"
+                      >
+                        {/* Member Identity & Details */}
+                        <div className="flex items-center gap-3.5">
+                          {memberAvatar ? (
+                            <img
+                              src={memberAvatar}
+                              alt={memberName}
+                              className="w-11 h-11 rounded-full object-cover ring-2 ring-white shadow-xs"
+                            />
+                          ) : (
+                            <div
+                              className={`w-11 h-11 rounded-full text-white font-extrabold text-xs flex items-center justify-center ring-2 ring-white shadow-xs ${
+                                isOwner
+                                  ? "bg-gradient-to-tr from-indigo-600 to-purple-600"
+                                  : "bg-gradient-to-tr from-slate-600 to-slate-800"
+                              }`}
+                            >
+                              {memberName.slice(0, 2).toUpperCase()}
+                            </div>
+                          )}
+
+                          <div>
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <h4 className="text-xs sm:text-sm font-bold text-slate-900">
+                                {memberName}
+                              </h4>
+                              {isMe && (
+                                <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-indigo-50 text-indigo-700 border border-indigo-100">
+                                  Bạn
+                                </span>
+                              )}
+                              <span
+                                className={`px-2 py-0.5 rounded-full text-[10px] font-bold flex items-center gap-1 ${
+                                  m.status === "accepted"
+                                    ? "bg-emerald-50 text-emerald-700 border border-emerald-100"
+                                    : "bg-amber-50 text-amber-700 border border-amber-100"
+                                }`}
+                              >
+                                <span
+                                  className={`w-1.5 h-1.5 rounded-full ${
+                                    m.status === "accepted" ? "bg-emerald-500" : "bg-amber-500 animate-pulse"
+                                  }`}
+                                />
+                                <span>{m.status === "accepted" ? "Đã tham gia" : "Chờ xác nhận"}</span>
+                              </span>
+                            </div>
+
+                            <p className="text-[11px] text-slate-400 mt-0.5">
+                              {m.joined_at
+                                ? `Tham gia ngày ${formatDateToDisplay(m.joined_at)}`
+                                : `Mời ngày ${formatDateToDisplay(m.created_at)}`}
+                            </p>
+                          </div>
+                        </div>
+
+                        {/* Role Assignment & Member Actions */}
+                        <div className="flex items-center gap-2.5 self-end sm:self-center">
+                          {/* Role selector for owner OR static badge for others */}
+                          {currentUserRole === "owner" ? (
+                            <div className="relative">
+                              <select
+                                value={m.role}
+                                disabled={isChanging}
+                                onChange={(e) =>
+                                  handleChangeRole(m.user_id, e.target.value as "owner" | "member")
+                                }
+                                className={`text-xs font-bold px-3 py-2 rounded-xl border appearance-none pr-8 cursor-pointer focus:outline-none transition-all ${
+                                  m.role === "owner"
+                                    ? "bg-indigo-50 text-indigo-700 border-indigo-200 hover:bg-indigo-100/70"
+                                    : "bg-slate-100 text-slate-700 border-slate-200 hover:bg-slate-200/70"
+                                } disabled:opacity-50`}
+                              >
+                                <option value="owner">🎯 Trưởng nhóm</option>
+                                <option value="member">👥 Thành viên</option>
+                              </select>
+                              <ChevronDown className="w-3.5 h-3.5 text-slate-500 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                            </div>
+                          ) : (
+                            <span
+                              className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 border ${
+                                m.role === "owner"
+                                  ? "bg-indigo-50 text-indigo-700 border-indigo-100"
+                                  : "bg-slate-100 text-slate-700 border-slate-200"
+                              }`}
+                            >
+                              {m.role === "owner" ? (
+                                <>
+                                  <Crown className="w-3.5 h-3.5 text-indigo-600" />
+                                  <span>Trưởng nhóm</span>
+                                </>
+                              ) : (
+                                <>
+                                  <User className="w-3.5 h-3.5 text-slate-500" />
+                                  <span>Thành viên</span>
+                                </>
+                              )}
+                            </span>
+                          )}
+
+                          {/* Delete Member Button (Kick - Leader only, cannot kick self) */}
+                          {currentUserRole === "owner" && !isMe && (
+                            <button
+                              type="button"
+                              onClick={() => setMemberToDelete(m)}
+                              title="Xóa thành viên khỏi chuyến đi"
+                              className="p-2 rounded-xl text-slate-400 hover:text-rose-600 hover:bg-rose-50 border border-transparent hover:border-rose-100 transition-colors cursor-pointer"
+                            >
+                              <UserX className="w-4 h-4" />
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+
+            {/* 2. LEAVE TRIP CARD (For Members or Leaders when >1 Leader exists) */}
+            {(currentUserRole === "member" || members.filter((m) => m.role === "owner").length > 1) && (
+              <div className="bg-amber-50/60 border border-amber-200/80 rounded-3xl p-6 sm:p-7 flex flex-col md:flex-row items-start md:items-center justify-between gap-6 shadow-2xs">
+                <div className="flex items-start gap-4">
+                  <div className="w-11 h-11 rounded-2xl bg-amber-500 text-white flex items-center justify-center shrink-0 shadow-sm">
+                    <UserMinus className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <span className="text-[11px] font-bold text-amber-700 uppercase tracking-wider block">
+                      RỜI KHỎI NHÓM DU LỊCH
+                    </span>
+                    <h3 className="text-base sm:text-lg font-extrabold text-slate-900 mt-0.5">
+                      Rời khỏi chuyến đi này
+                    </h3>
+                    <p className="text-xs text-slate-600 mt-1 max-w-xl leading-relaxed">
+                      Bạn sẽ không còn là thành viên của chuyến đi này. Lịch trình và các khoản tiền bạn đã chia vẫn được lưu giữ an toàn để nhóm đối soát công nợ.
+                    </p>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setShowLeaveModal(true)}
+                  className="inline-flex items-center gap-2 px-5 py-3 rounded-2xl bg-amber-600 hover:bg-amber-700 text-white text-xs sm:text-sm font-bold shadow-md shadow-amber-600/20 transition-all cursor-pointer shrink-0 self-end md:self-center"
+                >
+                  <LogOut className="w-4 h-4" />
+                  <span>Rời chuyến đi</span>
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ===================== TAB 3: THÔNG BÁO & LỊCH ===================== */}
+        {activeTab === "notifications" && (
+          <div className="bg-white rounded-3xl p-6 sm:p-8 border border-slate-200/80 shadow-2xs space-y-6 text-center animate-fadeIn py-12">
+            <div className="w-12 h-12 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center mx-auto">
+              <Bell className="w-6 h-6" />
+            </div>
+            <div className="max-w-md mx-auto">
+              <h3 className="text-base font-bold text-slate-900">Cài đặt thông báo & Nhắc lịch</h3>
+              <p className="text-xs text-slate-500 mt-1.5 leading-relaxed">
+                Hệ thống tự động thông báo trước mỗi mốc giờ hoạt động trên timeline và nhắc nhở phân chia chi phí qua email.
+              </p>
+            </div>
+            <span className="inline-flex items-center gap-1.5 text-xs font-bold text-emerald-600 bg-emerald-50 px-3 py-1.5 rounded-full border border-emerald-100">
+              <Check className="w-3.5 h-3.5 stroke-[3]" />
+              <span>Đang bật thông báo tự động</span>
+            </span>
+          </div>
+        )}
+
+        {/* ===================== TAB 4: VÍ CHUNG & TIỀN TỆ ===================== */}
+        {activeTab === "wallet" && (
+          <div className="bg-white rounded-3xl p-6 sm:p-8 border border-slate-200/80 shadow-2xs space-y-6 text-center animate-fadeIn py-12">
+            <div className="w-12 h-12 rounded-2xl bg-purple-50 text-purple-600 flex items-center justify-center mx-auto">
+              <CreditCard className="w-6 h-6" />
+            </div>
+            <div className="max-w-md mx-auto">
+              <h3 className="text-base font-bold text-slate-900">Thiết lập ví chung & Tiền tệ</h3>
+              <p className="text-xs text-slate-500 mt-1.5 leading-relaxed">
+                Tiền tệ mặc định của chuyến đi hiện đang được định dạng theo <strong>VNĐ (Việt Nam Đồng)</strong> với thuật toán chia đều và chia tùy chỉnh.
+              </p>
+            </div>
+            <span className="inline-flex items-center gap-1.5 text-xs font-bold text-indigo-600 bg-indigo-50 px-3 py-1.5 rounded-full border border-indigo-100">
+              <span>Đơn vị tiền tệ: ₫ (VND)</span>
+            </span>
+          </div>
+        )}
       </main>
 
       {/* 7. FOOTER */}
@@ -940,7 +1409,110 @@ export default function TripSettings({ tripId }: TripSettingsProps) {
         </div>
       )}
 
-      {/* 9. DELETE CONFIRMATION MODAL */}
+      {/* 9. INVITE FRIENDS MODAL */}
+      <InviteFriendsModal
+        isOpen={showInviteModal}
+        onClose={() => {
+          setShowInviteModal(false);
+          fetchMembers();
+        }}
+        tripId={tripId}
+        tripName={tripName}
+      />
+
+      {/* 10. KICK MEMBER CONFIRMATION MODAL */}
+      {memberToDelete && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl p-6 sm:p-7 max-w-md w-full shadow-2xl border border-slate-100 space-y-4 animate-scaleUp">
+            <div className="flex items-start gap-3">
+              <div className="w-10 h-10 rounded-2xl bg-rose-100 text-rose-600 flex items-center justify-center shrink-0">
+                <UserX className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-slate-900">
+                  Xác nhận xóa thành viên?
+                </h3>
+                <p className="text-xs text-slate-500 mt-1 leading-relaxed">
+                  Bạn có chắc chắn muốn xóa thành viên <strong className="text-slate-800">{memberToDelete.profiles?.full_name || "này"}</strong> khỏi chuyến đi? Người này sẽ mất quyền xem lịch trình và chi phí của nhóm.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2.5 pt-2">
+              <button
+                type="button"
+                onClick={() => setMemberToDelete(null)}
+                className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 cursor-pointer"
+              >
+                Hủy bỏ
+              </button>
+
+              <button
+                type="button"
+                onClick={handleKickMember}
+                disabled={isRemovingMember}
+                className="inline-flex items-center gap-1.5 px-5 py-2.5 rounded-xl text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 disabled:opacity-40 transition-all cursor-pointer shadow-sm"
+              >
+                {isRemovingMember ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spinner" />
+                    <span>Đang xóa...</span>
+                  </>
+                ) : (
+                  <span>Xác nhận xóa</span>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 11. LEAVE TRIP CONFIRMATION MODAL */}
+      {showLeaveModal && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl p-6 sm:p-7 max-w-md w-full shadow-2xl border border-slate-100 space-y-4 animate-scaleUp">
+            <div className="flex items-start gap-3">
+              <div className="w-10 h-10 rounded-2xl bg-amber-100 text-amber-700 flex items-center justify-center shrink-0">
+                <UserMinus className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-slate-900">
+                  Xác nhận rời khỏi chuyến đi?
+                </h3>
+                <p className="text-xs text-slate-500 mt-1 leading-relaxed">
+                  Bạn có chắc chắn muốn rời khỏi chuyến đi <strong className="text-slate-800">{tripName}</strong>? Để tham gia lại sau này, bạn sẽ cần được Trưởng nhóm mời hoặc chia sẻ mã PIN mới.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2.5 pt-2">
+              <button
+                type="button"
+                onClick={() => setShowLeaveModal(false)}
+                className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 cursor-pointer"
+              >
+                Hủy bỏ
+              </button>
+
+              <button
+                type="button"
+                onClick={handleLeaveTrip}
+                disabled={isLeavingTrip}
+                className="inline-flex items-center gap-1.5 px-5 py-2.5 rounded-xl text-xs font-bold text-white bg-amber-600 hover:bg-amber-700 disabled:opacity-40 transition-all cursor-pointer shadow-sm"
+              >
+                {isLeavingTrip ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spinner" />
+                    <span>Đang xử lý...</span>
+                  </>
+                ) : (
+                  <span>Xác nhận rời đi</span>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       {showDeleteModal && (
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl p-6 sm:p-7 max-w-md w-full shadow-2xl border border-slate-100 space-y-4 animate-scaleUp">
