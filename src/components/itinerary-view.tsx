@@ -29,8 +29,10 @@ import {
   GripVertical,
   ExternalLink,
   Zap,
+  Receipt,
 } from "lucide-react";
 import { formatDateToDisplay, normalizeDateToISO } from "@/lib/date-utils";
+import ExpenseView from "./expense-view";
 
 // ==========================================
 // TYPES & DATA STRUCTURES
@@ -242,6 +244,7 @@ export default function ItineraryView({ tripId }: ItineraryViewProps) {
   const router = useRouter();
 
   // Data states
+  const [mainTab, setMainTab] = useState<"itinerary" | "expenses">("itinerary");
   const [trip, setTrip] = useState<TripDetail | null>(null);
   const [days, setDays] = useState<ItineraryDay[]>([]);
   const [activeDayId, setActiveDayId] = useState<string>("all");
@@ -944,9 +947,52 @@ export default function ItineraryView({ tripId }: ItineraryViewProps) {
         </div>
 
         {/* ==========================================
-            DAY TABS & ACTIONS BAR (Feature 12.0)
+            MAIN TRIP NAVIGATION TABS (MỤC C & MỤC D)
         ========================================== */}
-        <div className="bg-white rounded-3xl p-4 sm:p-5 border border-slate-200/80 shadow-sm space-y-4">
+        <div className="flex items-center gap-2 p-1.5 bg-white/90 backdrop-blur-md rounded-2xl w-fit border border-slate-200/90 shadow-2xs">
+          <button
+            onClick={() => setMainTab("itinerary")}
+            className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer ${
+              mainTab === "itinerary"
+                ? "bg-indigo-600 text-white shadow-md shadow-indigo-200"
+                : "text-slate-600 hover:text-slate-900 hover:bg-slate-100"
+            }`}
+          >
+            <Compass className="w-4 h-4" />
+            <span>Lịch trình (Mục C)</span>
+          </button>
+
+          <button
+            onClick={() => setMainTab("expenses")}
+            className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer ${
+              mainTab === "expenses"
+                ? "bg-indigo-600 text-white shadow-md shadow-indigo-200"
+                : "text-slate-600 hover:text-slate-900 hover:bg-slate-100"
+            }`}
+          >
+            <Receipt className="w-4 h-4" />
+            <span>Chi phí & Chia tiền (Mục D)</span>
+            <span
+              className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold ${
+                mainTab === "expenses" ? "bg-white/20 text-white" : "bg-purple-100 text-purple-700"
+              }`}
+            >
+              Mục D
+            </span>
+          </button>
+        </div>
+
+        {mainTab === "expenses" ? (
+          <ExpenseView
+            tripId={tripId}
+            tripName={trip?.name}
+          />
+        ) : (
+          <>
+            {/* ==========================================
+                DAY TABS & ACTIONS BAR (Feature 12.0)
+            ========================================== */}
+            <div className="bg-white rounded-3xl p-4 sm:p-5 border border-slate-200/80 shadow-sm space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-4">
             <div className="flex items-center gap-2">
               <Compass className="w-5 h-5 text-indigo-600" />
@@ -1356,7 +1402,9 @@ export default function ItineraryView({ tripId }: ItineraryViewProps) {
             })}
           </div>
         )}
-      </div>
+      </>
+    )}
+  </div>
 
       {/* ==========================================
           MODAL: THÊM / SỬA NGÀY (Feature 12.0)
