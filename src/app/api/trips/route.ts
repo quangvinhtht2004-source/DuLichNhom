@@ -13,12 +13,26 @@ export async function GET() {
     return NextResponse.json({ error: 'Chưa đăng nhập' }, { status: 401 })
   }
 
+  // Chỉ lấy các chuyến đi mà user là thành viên (accepted)
+  const { data: memberships } = await supabase
+    .from('trip_members')
+    .select('trip_id')
+    .eq('user_id', user.id)
+    .eq('status', 'accepted')
+
+  const tripIds = (memberships ?? []).map((m) => m.trip_id)
+
+  if (tripIds.length === 0) {
+    return NextResponse.json({ trips: [], upcoming: [], past: [] })
+  }
+
   const { data: trips, error } = await supabase
     .from('trips')
     .select(
       `id, name, destination, start_date, end_date, cover_image_url, created_by, created_at, updated_at,
        trip_members (id, user_id, role, status)`
     )
+    .in('id', tripIds)
     .order('start_date', { ascending: true })
 
   if (error) {

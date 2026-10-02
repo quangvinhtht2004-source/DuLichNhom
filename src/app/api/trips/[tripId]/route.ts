@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
 import { normalizeDateToISO } from '@/lib/date-utils'
+import { verifyTripMember, isAuthError } from '@/lib/trip-auth'
 import type { TablesUpdate } from '@/types/database'
 
 interface RouteContext {
@@ -16,7 +16,10 @@ export async function GET(request: Request, context: RouteContext) {
       return NextResponse.json({ error: 'Thiếu ID chuyến đi' }, { status: 400 })
     }
 
-    const supabase = await createClient()
+    const auth = await verifyTripMember(tripId)
+    if (isAuthError(auth)) return auth
+
+    const { supabase } = auth
 
     const { data: trip, error } = await supabase
       .from('trips')
@@ -73,6 +76,11 @@ export async function PATCH(request: Request, context: RouteContext) {
       return NextResponse.json({ error: 'Dữ liệu JSON không hợp lệ' }, { status: 400 })
     }
 
+    const auth = await verifyTripMember(tripId)
+    if (isAuthError(auth)) return auth
+
+    const { supabase } = auth
+
     const {
       name,
       destination,
@@ -81,13 +89,20 @@ export async function PATCH(request: Request, context: RouteContext) {
       cover_image_url,
     } = body || {}
 
-    const supabase = await createClient()
-
     const updates: TablesUpdate<'trips'> = {
       updated_at: new Date().toISOString(),
     }
 
-    if (name !== undefined) updates.name = name.trim()
+    if (name !== undefined) {
+      const trimmed = name.trim()
+      if (!trimmed) {
+        return NextResponse.json(
+          { error: 'Tên chuyến đi không được để trống' },
+          { status: 400 }
+        )
+      }
+      updates.name = trimmed
+    }
     if (destination !== undefined) updates.destination = destination.trim()
     if (start_date !== undefined) updates.start_date = normalizeDateToISO(start_date)
     if (end_date !== undefined) updates.end_date = normalizeDateToISO(end_date)
@@ -126,25 +141,29 @@ export async function DELETE(request: Request, context: RouteContext) {
       return NextResponse.json({ error: 'Thiếu ID chuyến đi' }, { status: 400 })
     }
 
+    const auth = await verifyTripMember(tripId)
+    if (isAuthError(auth)) return auth
+
+    const { supabase, user, memberRole } = auth
+
+    // Chỉ Owner mới có quyền xóa chuyến đi
+    if (memberRole !== 'owner') {
+      return NextResponse.json(
+        { error: 'Chỉ Trưởng nhóm mới có quyền xóa chuyến đi' },
+        { status: 403 }
+      )
+    }
+
     const body = await request.json().catch(() => ({}))
     const { reason } = body || {}
-
-    const supabase = await createClient()
-
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
-
-    if (!user) {
-      return NextResponse.json({ error: 'Chưa đăng nhập' }, { status: 401 })
-    }
 
     if (reason) {
       console.log(`[Trip Deleted] Trip ID ${tripId} deleted by user ${user.id}. Reason: "${reason}"`)
     }
 
     // 1. Xóa các bản ghi liên quan để tránh lỗi khóa ngoại (Foreign Key)
-    await Promise.allSettled([
+    // TODO: Nên sử dụng CASCADE DELETE ở database level để đảm bảo toàn vẹn dữ liệu
+    const cleanupResults = await Promise.allSettled([
       supabase.from('trip_members').delete().eq('trip_id', tripId),
       supabase.from('trip_invites').delete().eq('trip_id', tripId),
       supabase.from('itinerary_days').delete().eq('trip_id', tripId),
@@ -152,6 +171,13 @@ export async function DELETE(request: Request, context: RouteContext) {
       supabase.from('chat_messages').delete().eq('trip_id', tripId),
       supabase.from('expense_settlements').delete().eq('trip_id', tripId),
     ])
+
+    // Log các lỗi cleanup (nếu có) để dễ debug
+    cleanupResults.forEach((result, index) => {
+      if (result.status === 'rejected') {
+        console.error(`[Trip Delete] Cleanup step ${index} failed for trip ${tripId}:`, result.reason)
+      }
+    })
 
     // 2. Xóa chuyến đi khỏi bảng trips
     const { error: deleteTripError } = await supabase

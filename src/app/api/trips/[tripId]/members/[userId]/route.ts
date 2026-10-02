@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { verifyTripMember, isAuthError } from '@/lib/trip-auth'
 
 export async function PATCH(
   request: Request,
@@ -13,14 +13,17 @@ export async function PATCH(
     return NextResponse.json({ error: 'role không hợp lệ (phải là owner hoặc member)' }, { status: 400 })
   }
 
-  const supabase = await createClient()
+  const auth = await verifyTripMember(tripId)
+  if (isAuthError(auth)) return auth
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
+  const { supabase, memberRole } = auth
 
-  if (!user) {
-    return NextResponse.json({ error: 'Chưa đăng nhập' }, { status: 401 })
+  // Chỉ Owner mới có quyền thay đổi vai trò thành viên
+  if (memberRole !== 'owner') {
+    return NextResponse.json(
+      { error: 'Chỉ Trưởng nhóm mới có quyền thay đổi vai trò thành viên' },
+      { status: 403 }
+    )
   }
 
   // Bảo vệ chuyến đi: Không cho phép hạ quyền Owner duy nhất còn lại
@@ -60,14 +63,18 @@ export async function DELETE(
   { params }: { params: Promise<{ tripId: string; userId: string }> }
 ) {
   const { tripId, userId } = await params
-  const supabase = await createClient()
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
+  const auth = await verifyTripMember(tripId)
+  if (isAuthError(auth)) return auth
 
-  if (!user) {
-    return NextResponse.json({ error: 'Chưa đăng nhập' }, { status: 401 })
+  const { supabase, memberRole } = auth
+
+  // Chỉ Owner mới có quyền xóa thành viên khác
+  if (memberRole !== 'owner') {
+    return NextResponse.json(
+      { error: 'Chỉ Trưởng nhóm mới có quyền xóa thành viên' },
+      { status: 403 }
+    )
   }
 
   // Bảo vệ chuyến đi: Không cho phép xóa Owner duy nhất còn lại
