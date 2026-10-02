@@ -26,7 +26,7 @@ export async function POST(request: Request) {
   const { data: invite, error: inviteError } = await admin
     .from('trip_invites')
     .select('*')
-    .ilike('code', cleanCode)
+    .eq('code', cleanCode.toLowerCase())
     .maybeSingle()
 
   if (inviteError || !invite) {
@@ -72,6 +72,8 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: updateError.message }, { status: 400 })
     }
 
+    // TODO: Race condition — nếu 2 người join đồng thời, uses_count có thể bị đếm sai.
+    // Fix lý tưởng: dùng Supabase RPC với SQL "UPDATE trip_invites SET uses_count = uses_count + 1"
     await admin
       .from('trip_invites')
       .update({ uses_count: invite.uses_count + 1 })
@@ -98,6 +100,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: memberError.message }, { status: 400 })
   }
 
+  // TODO: Race condition — xem comment tương tự ở trên
   await admin
     .from('trip_invites')
     .update({ uses_count: invite.uses_count + 1 })
