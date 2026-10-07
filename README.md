@@ -20,8 +20,8 @@
 ## 🌟 Giới thiệu
 
 **TripTogether** giải quyết các vấn đề nan giải thường gặp khi đi du lịch nhóm:
-1. **Lịch trình rời rạc:** Gom toàn bộ hoạt động theo từng ngày vào một timeline trực quan.
-2. **"Ai nợ ai bao nhiêu?":** Ghi nhận chi tiêu, hỗ trợ chia đều hoặc tùy biến, tự động tính toán phương án trả nợ tối ưu với số lần chuyển khoản ít nhất.
+1. **Lịch trình rời rạc:** Gom toàn bộ hoạt động theo từng ngày vào một timeline trực quan, hỗ trợ kéo-thả sắp xếp.
+2. **"Ai nợ ai bao nhiêu?":** Ghi nhận chi tiêu, hỗ trợ chia đều / theo % / tùy chỉnh, tự động tính toán phương án trả nợ tối ưu với số lần chuyển khoản ít nhất.
 3. **Quên đồ & bỏ sót việc:** Checklist to-do và packing list chung, gán người phụ trách cụ thể.
 4. **Mời bạn bè dễ dàng:** Tham gia nhóm nhanh chóng thông qua mã mời (`invite_code`).
 
@@ -65,23 +65,33 @@ QLDLN/
 │   │   │   │   └── callback/         # GET /api/auth/callback
 │   │   │   └── trips/                # Nhóm API Quản lý chuyến đi
 │   │   │       ├── route.ts          # GET, POST /api/trips
+│   │   │       ├── invitations/      # GET /api/trips/invitations
 │   │   │       └── [tripId]/         # GET, PATCH, DELETE /api/trips/[tripId]
+│   │   │           ├── members/      # GET, DELETE members
+│   │   │           ├── invites/      # POST invites
+│   │   │           ├── itinerary/    # Lịch trình & hoạt động
+│   │   │           ├── expenses/     # Chi tiêu & quyết toán
+│   │   │           └── checklists/   # Checklist & đồ đạc
+│   │   ├── trips/
+│   │   │   └── [tripId]/             # Trang chi tiết chuyến đi
+│   │   │       └── settings/         # Cài đặt chuyến đi
 │   │   ├── dashboard/                # Trang tổng quan chuyến đi (/dashboard)
 │   │   ├── profile/                  # Trang hồ sơ cá nhân (/profile)
 │   │   ├── favicon.ico
-│   │   ├── globals.css               # Global styles, Tailwind v4, Keyframe animations & Hover states
+│   │   ├── globals.css               # Global styles, Tailwind v4, Keyframe animations
 │   │   ├── layout.tsx                # Root layout
 │   │   └── page.tsx                  # Trang chủ (Login / Register Card)
 │   │
 │   ├── components/                   # React Components
 │   │   ├── auth-card.tsx             # Giao diện Đăng nhập / Đăng ký / Quên MK
 │   │   ├── create-trip-modal.tsx     # Modal tạo chuyến đi mới
+│   │   ├── expense-view.tsx          # Quản lý chi phí (KPI, công nợ, modal chia tiền)
 │   │   ├── invite-friends-modal.tsx  # Modal mời bạn bè tham gia nhóm
+│   │   ├── itinerary-view.tsx        # Timeline lịch trình + tab Chi phí
 │   │   ├── profile-card.tsx          # Giao diện quản lý hồ sơ cá nhân & avatar
-│   │   ├── trip-dashboard.tsx        # Dashboard hiển thị danh sách chuyến đi, skeleton loader
+│   │   ├── trip-dashboard.tsx        # Dashboard hiển thị danh sách chuyến đi
 │   │   ├── trip-invite-modal.tsx     # Modal hiển thị lời mời du lịch
-│   │   └── trip-settings.tsx         # Cài đặt chuyến đi, chỉnh sửa thông tin & xóa chuyến đi
-│   │
+│   │   └── trip-settings.tsx         # Cài đặt chuyến đi, chỉnh sửa thông tin & xóa
 │   ├── lib/
 │   │   ├── date-utils.ts             # Chuẩn hóa & chuyển đổi ngày tháng (ISO ↔ DD/MM/YYYY)
 │   │   └── supabase/                 # Cấu hình kết nối Supabase
@@ -174,11 +184,37 @@ Tất cả các endpoint đều trả về dữ liệu định dạng **JSON** v
 
 | Chức năng | Phương thức | Endpoint | Body (JSON) | Response thành công |
 |---|---|---|---|---|
-| **Lấy danh sách chuyến đi** | `GET` | `/api/trips` | *(Trống - lấy chuyến đi của user)* | `200 OK` + `{"trips": [...]}` |
-| **Tạo chuyến đi mới** | `POST` | `/api/trips` | `{"name", "destination"?, "start_date"?, "end_date"?, "cover_image_url"?}` | `201 Created` + `{"trip": {...}}` |
-| **Xem chi tiết chuyến đi** | `GET` | `/api/trips/[tripId]` | *(Trống)* | `200 OK` + `{"trip": {...}}` |
-| **Cập nhật chuyến đi** | `PATCH` | `/api/trips/[tripId]` | `{"name"?, "destination"?, "start_date"?, "end_date"?, "cover_image_url"?}` | `200 OK` + `{"trip": {...}}` |
-| **Xóa chuyến đi** | `DELETE` | `/api/trips/[tripId]` | `{"reason"?}` *(Tự động cascade dọn sạch dữ liệu phụ thuộc)* | `200 OK` + `{"message": "Đã xóa chuyến đi thành công"}` |
+| **Lấy DS chuyến đi** | `GET` | `/api/trips` | *(Trống)* | `200 OK` + `{"trips": [...]}` |
+| **Tạo chuyến đi** | `POST` | `/api/trips` | `{"name", "destination"?, "start_date"?, ...}` | `201 Created` + `{"trip": {...}}` |
+| **Xem chuyến đi** | `GET` | `/api/trips/[tripId]` | *(Trống)* | `200 OK` + `{"trip": {...}}` |
+| **Cập nhật chuyến đi** | `PATCH` | `/api/trips/[tripId]` | `{"name"?, "destination"?, ...}` | `200 OK` + `{"trip": {...}}` |
+| **Xóa chuyến đi** | `DELETE` | `/api/trips/[tripId]` | `{"reason"?}` | `200 OK` + `{"message": "..."}` |
+| **DS thành viên** | `GET` | `/api/trips/[tripId]/members` | *(Trống)* | `200 OK` + `{"members": [...]}` |
+| **Rời chuyến đi** | `DELETE` | `/api/trips/[tripId]/members/me` | *(Trống)* | `200 OK` + `{"success": true}` |
+| **Mời thành viên** | `POST` | `/api/trips/[tripId]/invites` | `{"email"}` | `200 OK` + `{"invitation": {...}}` |
+| **Xem lời mời** | `GET` | `/api/trips/invitations` | *(Trống)* | `200 OK` + `{"invitations": [...]}` |
+
+### Nhóm C: Lịch trình chi tiết (Itinerary)
+
+| Chức năng | Phương thức | Endpoint | Body (JSON) | Response thành công |
+|---|---|---|---|---|
+| **Lấy lịch trình** | `GET` | `/api/trips/[tripId]/itinerary` | *(Trống)* | `200 OK` + `{"days": [...]}` |
+| **Tạo ngày mới** | `POST` | `/api/trips/[tripId]/itinerary` | `{"day_date", "notes"?}` | `201 Created` + `{"day": {...}}` |
+| **Sửa/Xóa ngày** | `PATCH/DEL` | `/api/trips/[tripId]/itinerary/[dayId]` | `{"day_date"?, "notes"?}` | `200 OK` |
+| **Thêm hoạt động** | `POST` | `/api/trips/[tripId]/itinerary/[dayId]/items` | `{"title", "start_time"?, ...}` | `201 Created` + `{"item": {...}}` |
+| **Sửa/Xóa hoạt động**| `PATCH/DEL` | `/api/trips/[tripId]/itinerary/[dayId]/items/[itemId]`| `{"title"?, ...}` | `200 OK` |
+| **Sắp xếp thứ tự** | `POST` | `/api/trips/[tripId]/itinerary/[dayId]/items/reorder` | `{"order": ["id1", "id2", ...]}` | `200 OK` |
+| **Tải ảnh hoạt động**| `POST` | `/api/trips/[tripId]/itinerary/[dayId]/items/[itemId]/image`| `FormData: file` | `200 OK` |
+
+### Nhóm D: Quản lý Chi phí (Expense Splitting)
+
+| Chức năng | Phương thức | Endpoint | Body (JSON) | Response thành công |
+|---|---|---|---|---|
+| **Lấy DS khoản chi** | `GET` | `/api/trips/[tripId]/expenses` | *(Trống)* | `200 OK` + `{"expenses": [...]}` |
+| **Thêm khoản chi** | `POST` | `/api/trips/[tripId]/expenses` | `{"amount", "description", "split_method", ...}` | `201 Created` |
+| **Sửa/Xóa khoản chi**| `PATCH/DEL` | `/api/trips/[tripId]/expenses/[expenseId]` | `{"amount"?, ...}` | `200 OK` |
+| **Quyết toán nợ** | `POST` | `/api/trips/[tripId]/expenses/settle` | `{"from_user", "to_user", "is_settled"?}` | `200 OK` |
+| **Tải lên hóa đơn** | `POST` | `/api/trips/[tripId]/expenses/upload-receipt` | `FormData: file` | `200 OK` + `{"publicUrl": "..."}` |
 
 ---
 
@@ -229,8 +265,8 @@ Hệ thống được thiết kế trên PostgreSQL với các bảng cốt lõi
 
 - [x] **Nhóm A: Quản lý tài khoản & Người dùng** (Đăng ký, Đăng nhập, Profile, Avatar, Đổi mật khẩu, Google OAuth)
 - [x] **Nhóm B: Quản lý chuyến đi (Trip)** (CRUD chuyến đi, Chuẩn hóa ngày tháng, Xóa an toàn có lý do, Modal tạo chuyến đi)
-- [ ] **Nhóm C: Lịch trình chi tiết (Itinerary)** (Tạo timeline theo ngày, kéo thả sắp xếp hoạt động)
-- [ ] **Nhóm D: Quản lý chi phí (Expense Splitting)** (Ghi nhận khoản chi, chia tiền, thuật toán tối ưu hóa công nợ "ai nợ ai")
+- [x] **Nhóm C: Lịch trình chi tiết (Itinerary)** (Tạo timeline theo ngày, kéo thả sắp xếp hoạt động)
+- [x] **Nhóm D: Quản lý chi phí (Expense Splitting)** (Ghi nhận khoản chi, chia tiền, thuật toán tối ưu hóa công nợ "ai nợ ai")
 - [ ] **Nhóm E: Checklist & Đồ đạc (Packing List)** (Gán người phụ trách, đánh dấu hoàn thành)
 - [ ] **Nhóm F & G: Dashboard & Tương tác nhóm** (Đếm ngược ngày đi, thống kê biểu đồ chi tiêu, realtime sync)
 
