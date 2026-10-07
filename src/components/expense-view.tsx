@@ -1972,7 +1972,7 @@ export default function ExpenseView({
                       const info = getMemberInfo(m.user_id);
                       return (
                         <option key={m.user_id} value={m.user_id}>
-                          {info.name} {info.isMe ? "(Bạn)" : ""}
+                          {info.name}
                         </option>
                       );
                     })}
@@ -2196,7 +2196,7 @@ export default function ExpenseView({
                                 )}
                               </div>
                               <span className="text-xs font-bold text-slate-800">
-                                {info.name} {info.isMe ? "(Bạn)" : ""}
+                                {info.name}
                               </span>
                             </div>
 
@@ -2261,7 +2261,7 @@ export default function ExpenseView({
                                 )}
                               </div>
                               <span className="text-xs font-bold text-slate-800 truncate">
-                                {info.name} {info.isMe ? "(Bạn)" : ""}
+                                {info.name}
                               </span>
                             </div>
 
@@ -2342,7 +2342,7 @@ export default function ExpenseView({
                                 )}
                               </div>
                               <span className="text-xs font-bold text-slate-800 truncate">
-                                {info.name} {info.isMe ? "(Bạn)" : ""}
+                                {info.name}
                               </span>
                             </div>
 
