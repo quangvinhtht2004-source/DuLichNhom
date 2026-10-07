@@ -40,7 +40,7 @@ export async function DELETE(
   const auth = await verifyTripMember(tripId)
   if (isAuthError(auth)) return auth
 
-  const { supabase } = auth
+  const { supabase, user, memberRole } = auth
 
   const { data: expense } = await supabase
     .from('expenses')
@@ -51,6 +51,14 @@ export async function DELETE(
 
   if (!expense) {
     return NextResponse.json({ error: 'Khoản chi không tồn tại' }, { status: 404 })
+  }
+
+  // Chỉ người tạo, người chi trả, hoặc owner mới được xóa
+  if (expense.created_by !== user.id && expense.paid_by !== user.id && memberRole !== 'owner') {
+    return NextResponse.json(
+      { error: 'Bạn không có quyền xóa khoản chi này' },
+      { status: 403 }
+    )
   }
 
   await supabase.from('expense_splits').delete().eq('expense_id', expenseId)
@@ -70,7 +78,7 @@ export async function PATCH(
   const auth = await verifyTripMember(tripId)
   if (isAuthError(auth)) return auth
 
-  const { supabase } = auth
+  const { supabase, user, memberRole } = auth
   const body = await request.json().catch(() => null)
 
   const { data: existing } = await supabase
@@ -84,7 +92,18 @@ export async function PATCH(
     return NextResponse.json({ error: 'Khoản chi không tồn tại' }, { status: 404 })
   }
 
+  // Chỉ người tạo, người chi trả, hoặc owner mới được sửa
+  if (existing.created_by !== user.id && existing.paid_by !== user.id && memberRole !== 'owner') {
+    return NextResponse.json(
+      { error: 'Bạn không có quyền chỉnh sửa khoản chi này' },
+      { status: 403 }
+    )
+  }
+
   const amount = body?.amount !== undefined ? Number(body.amount) : Number(existing.amount)
+  if (amount <= 0 || isNaN(amount)) {
+    return NextResponse.json({ error: 'Số tiền chi tiêu phải lớn hơn 0' }, { status: 400 })
+  }
   const description = body?.description !== undefined ? body.description.trim() : existing.description
   const paidBy = body?.paid_by !== undefined ? body.paid_by : existing.paid_by
   const splitMethod = body?.split_method !== undefined ? body.split_method : existing.split_method

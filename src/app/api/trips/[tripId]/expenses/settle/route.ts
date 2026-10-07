@@ -6,6 +6,13 @@ export async function POST(
   { params }: { params: Promise<{ tripId: string }> }
 ) {
   const { tripId } = await params
+
+  // Auth trước, validate sau — tránh leak logic cho user chưa đăng nhập
+  const auth = await verifyTripMember(tripId)
+  if (isAuthError(auth)) return auth
+
+  const { supabase } = auth
+
   const body = await request.json().catch(() => null)
 
   const fromUser = body?.from_user
@@ -19,10 +26,6 @@ export async function POST(
     )
   }
 
-  const auth = await verifyTripMember(tripId)
-  if (isAuthError(auth)) return auth
-
-  const { supabase } = auth
 
   // Lấy tất cả các khoản chi của chuyến đi do toUser chi trả
   const { data: expenses, error: expError } = await supabase
